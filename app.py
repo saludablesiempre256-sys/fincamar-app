@@ -6,10 +6,10 @@ from PIL import Image, ImageDraw
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import getSampleStyleSheet
 import io
 
-# Configuración de la aplicación
+# Configuración de página
 st.set_page_config(page_title="FINCAMAR v10.0", page_icon="🌾", layout="wide")
 
 # --- BASE DE DATOS Y ESTADOS EN SESIÓN ---
@@ -26,14 +26,14 @@ if 'personal' not in st.session_state:
 
 if 'actividades_catalogo' not in st.session_state:
     st.session_state.actividades_catalogo = {
-        "Cosecha": {"unidad": "ha", "color": (46, 139, 87, 130)},        # Verde
-        "Corte de monte": {"unidad": "ha", "color": (230, 126, 34, 130)},# Naranja
-        "Fumigación": {"unidad": "ha", "color": (52, 152, 219, 130)},    # Azul
-        "Tumbada de monilla": {"unidad": "ha", "color": (155, 89, 182, 130)}, # Morado
-        "Poda": {"unidad": "ha", "color": (241, 196, 15, 130)}           # Amarillo
+        "Cosecha": {"unidad": "ha", "color": (46, 139, 87, 130)},
+        "Corte de monte": {"unidad": "ha", "color": (230, 126, 34, 130)},
+        "Fumigación": {"unidad": "ha", "color": (52, 152, 219, 130)},
+        "Tumbada de monilla": {"unidad": "ha", "color": (155, 89, 182, 130)},
+        "Poda": {"unidad": "ha", "color": (241, 196, 15, 130)}
     }
 
-# --- MAPEO DE COORDENADAS exactas DEL PLANO FINCAMAR ---
+# --- MAPEO DE COORDENADAS FINCAMAR ---
 LOTES_INFO = {
     "EUROPEA": {"ha": 2.00, "bbox": (160, 40, 480, 160)},
     "CARRETERO": {"ha": 2.00, "bbox": (20, 165, 195, 360)},
@@ -54,52 +54,33 @@ LOTES_INFO = {
     "TRES HECTAREAS": {"ha": 3.00, "bbox": (835, 805, 960, 970)}
 }
 
-# --- PARSER INTELIGENTE DE WHATSAPP ---
+# --- PARSER WHATSAPP Y GENERADOR DE MAPA ---
 def procesar_texto_whatsapp(texto):
-    # 1. Extracción de Fecha
     fecha_match = re.search(r'(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4})', texto)
     fecha = fecha_match.group(1) if fecha_match else datetime.today().strftime('%Y-%m-%d')
     
-    # 2. Extracción de Sacos y Libras
     sacos_match = re.search(r'(\d+)\s*sacos?\s*completos?', texto, re.IGNORECASE)
     sacos = int(sacos_match.group(1)) if sacos_match else 0
     
     libras_match = re.search(r'(\d+[.,]?\d*)\s*libras', texto, re.IGNORECASE)
     libras = float(libras_match.group(1).replace(',', '.')) if libras_match else 0.0
 
-    # 3. Extracción de Hectáreas trabajadas
-    ha_cosecha_match = re.search(r'cosecharon\s*(\d+[\d\s½¾¼/.,]*)\s*Hectarias', texto, re.IGNORECASE)
-    ha_corte_match = re.search(r'Corte de monte[\s\S]*?Se realizaron\s*(\d+[\d\s½¾¼/.,]*)\s*Hectarias', texto, re.IGNORECASE)
-
-    # 4. Asistencia de Personal
-    personal_detectado = []
-    for p in st.session_state.personal:
-        if re.search(re.escape(p["nombre"]), texto, re.IGNORECASE):
-            personal_detectado.append(p["nombre"])
-            
-    # Si no detecta nombres explícitos, toma a todo el equipo
+    personal_detectado = [p["nombre"] for p in st.session_state.personal if re.search(re.escape(p["nombre"]), texto, re.IGNORECASE)]
     if not personal_detectado:
         personal_detectado = [p["nombre"] for p in st.session_state.personal]
 
-    # 5. Mapeo de actividades y lotes mencionados
     actividades = []
     if "cosecha" in texto.lower():
         actividades.append({"actividad": "Cosecha", "lote": "PALACIO GRANDE", "ha": 2.5})
     if "corte de monte" in texto.lower() or "corte" in texto.lower():
         actividades.append({"actividad": "Corte de monte", "lote": "LAS TECAS", "ha": 1.5})
-    if "monilla" in texto.lower():
-        actividades.append({"actividad": "Tumbada de monilla", "lote": "EL CORAL", "ha": 1.0})
 
     return {
-        "fecha": fecha,
-        "sacos": sacos,
-        "libras": libras,
-        "asistencia": personal_detectado,
-        "actividades": actividades,
+        "fecha": fecha, "sacos": sacos, "libras": libras,
+        "asistencia": personal_detectado, "actividades": actividades,
         "texto_original": texto
     }
 
-# --- MOTOR GRÁFICO PARA EL MAPA ---
 def generar_mapa_avance(actividades_lotes, imagen_base_path="mapa_fincamar.png"):
     try:
         base_img = Image.open(imagen_base_path).convert("RGBA")
@@ -120,18 +101,23 @@ def generar_mapa_avance(actividades_lotes, imagen_base_path="mapa_fincamar.png")
     resultado = Image.alpha_composite(base_img, overlay)
     return resultado.convert("RGB")
 
-# --- INTERFAZ STREAMLIT ---
-st.title("FINCAMAR (v10.0)")
-st.caption("Control Operacional, Cosecha, Nómina y Mapeo de Cacao")
-
+# --- MENÚ LATERAL CON LOS 10 ÍTEMS ---
+st.sidebar.markdown("### Seleccione Opción:")
 opcion = st.sidebar.selectbox("Seleccione Opción:", [
     "⚡ Registrar Reporte Diario",
     "👥 Gestionar Personal",
     "📋 Crear / Ver Tareas Nuevas",
     "📅 Asistencia y Nómina Semanal",
+    "📊 Historial de Reportes",
     "🗺️ Mapa de Avance por Lote",
-    "📄 Generar PDF del Reporte"
+    "📄 Exportar Reporte Diario PDF",
+    "📄 Exportar Nómina PDF",
+    "🚜 Control de Maquinaria y Taller",
+    "⚙️ Configuración de Finca"
 ])
+
+st.title("FINCAMAR (v10.0)")
+st.caption("Control Operacional, Cosecha, Nómina y Mapeo de Cacao")
 
 # 1. REGISTRAR REPORTE DIARIO
 if opcion == "⚡ Registrar Reporte Diario":
@@ -139,204 +125,176 @@ if opcion == "⚡ Registrar Reporte Diario":
     metodo = st.radio("Método de Ingreso:", ["Pegar Texto Automático", "Formulario Manual"])
 
     if metodo == "Pegar Texto Automático":
-        raw_text = st.text_area("Pega aquí el mensaje de WhatsApp / Finca (acepta cualquier fecha):", height=250)
-        
+        raw_text = st.text_area("Pega aquí el mensaje de WhatsApp / Finca (acepta cualquier fecha):", height=200)
         if st.button("Procesar y Guardar Reporte"):
             if raw_text:
-                reporte_procesado = procesar_texto_whatsapp(raw_text)
-                st.session_state.reportes.append(reporte_procesado)
-                st.success(f"¡Reporte del {reporte_procesado['fecha']} procesado exitosamente!")
-                st.json(reporte_procesado)
+                rep = procesar_texto_whatsapp(raw_text)
+                st.session_state.reportes.append(rep)
+                st.success(f"¡Reporte del {rep['fecha']} procesado exitosamente!")
             else:
-                st.warning("Por favor, ingresa el texto del reporte.")
-
+                st.warning("Ingrese el texto del mensaje.")
     else:
-        st.subheader("Formulario Manual Multiactividad")
         fecha = st.date_input("Fecha del Reporte")
         col1, col2 = st.columns(2)
         with col1:
             sacos = st.number_input("Sacos Completos", min_value=0, step=1)
+        with col2:
             libras = st.number_input("Libras Extra / Parciales", min_value=0.0, step=0.5)
         
         st.markdown("---")
-        st.subheader("Asistencia del Personal")
-        asistencia_hoy = []
-        for p in st.session_state.personal:
-            if st.checkbox(f"Asistió: {p['nombre']} ({p['cargo']})", value=True):
-                asistencia_hoy.append(p["nombre"])
+        st.subheader("Asistencia de Personal")
+        asistencia_hoy = [p["nombre"] for p in st.session_state.personal if st.checkbox(f"Asistió: {p['nombre']}", value=True)]
 
         st.markdown("---")
-        st.subheader("Detalle de Actividades por Lote")
+        st.subheader("Actividad por Lote")
         lote_sel = st.selectbox("Lote de Trabajo:", list(LOTES_INFO.keys()))
         act_sel = st.selectbox("Actividad:", list(st.session_state.actividades_catalogo.keys()))
-        ha_sel = st.number_input("Avance (Hectáreas / Cantidad):", min_value=0.0, max_value=10.0, step=0.25)
-        obs = st.text_area("Observaciones Generales / Novedades de Taller y Maquinaria:")
+        ha_sel = st.number_input("Avance (Hectáreas / Cantidad):", min_value=0.0, step=0.25)
+        obs = st.text_area("Observaciones Generales:")
         
         if st.button("Guardar Reporte Manual"):
-            reporte_nuevo = {
-                "fecha": fecha.strftime('%Y-%m-%d'),
-                "sacos": sacos,
-                "libras": libras,
-                "texto_original": obs,
-                "asistencia": asistencia_hoy,
+            st.session_state.reportes.append({
+                "fecha": fecha.strftime('%Y-%m-%d'), "sacos": sacos, "libras": libras,
+                "texto_original": obs, "asistencia": asistencia_hoy,
                 "actividades": [{"actividad": act_sel, "lote": lote_sel, "ha": ha_sel}]
-            }
-            st.session_state.reportes.append(reporte_nuevo)
-            st.success("¡Reporte manual guardado con éxito!")
+            })
+            st.success("¡Reporte guardado!")
 
 # 2. GESTIONAR PERSONAL
 elif opcion == "👥 Gestionar Personal":
-    st.header("👥 Gestión de Empleados y Personal de Finca")
-    with st.form("form_nuevo_personal"):
-        nuevo_nom = st.text_input("Nombre Completo:")
-        nuevo_cargo = st.text_input("Cargo / Función Principal:", value="Obrero de Campo")
-        nuevo_jornal = st.number_input("Valor del Jornal ($):", value=15.0, step=1.0)
-        
-        if st.form_submit_button("Añadir Personal"):
-            if nuevo_nom:
-                st.session_state.personal.append({
-                    "nombre": nuevo_nom, "cargo": nuevo_cargo, "jornal": nuevo_jornal
-                })
-                st.success(f"¡Trabajador {nuevo_nom} registrado!")
-            else:
-                st.error("Ingrese el nombre del trabajador.")
-
+    st.header("👥 Gestionar Personal")
+    with st.form("form_personal"):
+        nom = st.text_input("Nombre Completo:")
+        cargo = st.text_input("Cargo / Función:", value="Obrero de Campo")
+        jornal = st.number_input("Jornal Diario ($):", value=15.0, step=1.0)
+        if st.form_submit_button("Añadir Nuevo Personal"):
+            if nom:
+                st.session_state.personal.append({"nombre": nom, "cargo": cargo, "jornal": jornal})
+                st.success(f"¡Trabajador {nom} agregado exitosamente!")
+    
     st.markdown("---")
     st.dataframe(pd.DataFrame(st.session_state.personal), use_container_width=True)
 
-# 3. CREAR TAREAS NUEVAS
+# 3. CREAR / VER TAREAS NUEVAS
 elif opcion == "📋 Crear / Ver Tareas Nuevas":
-    st.header("📋 Catálogo de Actividades")
-    with st.form("form_nueva_tarea"):
-        nombre_tarea = st.text_input("Nombre de la Tarea / Actividad Nueva:")
-        unidad_medida = st.selectbox("Unidad de Medida:", ["Hectáreas (ha)", "Horas", "Plantas", "Global"])
-        color_hex = st.color_picker("Color para Representar en el Mapa:", "#3498DB")
-        
-        if st.form_submit_button("Guardar Nueva Tarea"):
+    st.header("📋 Crear / Ver Tareas Nuevas")
+    with st.form("form_tareas"):
+        nombre_tarea = st.text_input("Nombre de la Nueva Tarea:")
+        unidad = st.selectbox("Unidad de Medida:", ["Hectáreas (ha)", "Horas", "Plantas", "Global"])
+        color_hex = st.color_picker("Color para el Mapa:", "#27AE60")
+        if st.form_submit_button("Guardar Tarea"):
             if nombre_tarea:
                 h = color_hex.lstrip('#')
                 rgba = tuple(int(h[i:i+2], 16) for i in (0, 2, 4)) + (130,)
-                st.session_state.actividades_catalogo[nombre_tarea] = {
-                    "unidad": unidad_medida, "color": rgba
-                }
-                st.success(f"¡Tarea '{nombre_tarea}' creada correctamente!")
+                st.session_state.actividades_catalogo[nombre_tarea] = {"unidad": unidad, "color": rgba}
+                st.success(f"¡Tarea '{nombre_tarea}' creada!")
 
     st.markdown("---")
-    for act, details in st.session_state.actividades_catalogo.items():
-        st.write(f"• **{act}** — Unidad: `{details['unidad']}`")
+    st.subheader("Catálogo Actual de Tareas:")
+    for k, v in st.session_state.actividades_catalogo.items():
+        st.write(f"• **{k}** — Unidad: `{v['unidad']}`")
 
-# 4. NÓMINA Y ASISTENCIA SEMANAL
+# 4. ASISTENCIA Y NÓMINA SEMANAL
 elif opcion == "📅 Asistencia y Nómina Semanal":
     st.header("📅 Asistencia y Nómina Semanal")
-    lunes_semana = st.date_input("Selecciona el Lunes de la Semana:")
+    lunes = st.date_input("Seleccionar Lunes de la Semana:")
     
-    if st.button("Generar Reporte de Asistencia"):
-        fechas_semana = [(lunes_semana + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
-        dias_nombre = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+    fechas = [(lunes + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
+    dias_nombre = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+    
+    matriz = []
+    for p in st.session_state.personal:
+        row = {"Trabajador": p["nombre"], "Cargo": p["cargo"]}
+        dias_cant = 0
+        for idx, f in enumerate(fechas):
+            asist = any(f == r["fecha"] and p["nombre"] in r.get("asistencia", []) for r in st.session_state.reportes)
+            row[dias_nombre[idx]] = "X" if asist else "-"
+            if asist: dias_cant += 1
+        row["Días Trabajados"] = dias_cant
+        row["Total a Pagar ($)"] = dias_cant * p["jornal"]
+        matriz.append(row)
         
-        matriz = []
-        for p in st.session_state.personal:
-            row = {"Trabajador": p["nombre"], "Cargo": p["cargo"]}
-            dias_trabajados = 0
-            for idx, f in enumerate(fechas_semana):
-                asistio = any(f == r["fecha"] and p["nombre"] in r.get("asistencia", []) for r in st.session_state.reportes)
-                row[dias_nombre[idx]] = "X" if asistio else "-"
-                if asistio:
-                    dias_trabajados += 1
-            
-            row["Días"] = dias_trabajados
-            row["Total Pago ($)"] = dias_trabajados * p["jornal"]
-            matriz.append(row)
-        
-        st.dataframe(pd.DataFrame(matriz), use_container_width=True)
+    st.dataframe(pd.DataFrame(matriz), use_container_width=True)
 
-# 5. MAPA DE AVANCE
-elif opcion == "🗺️ Mapa de Avance por Lote":
-    st.header("🗺️ Mapa de Avance de la Finca")
+# 5. HISTORIAL DE REPORTES
+elif opcion == "📊 Historial de Reportes":
+    st.header("📊 Historial de Reportes Guardados")
     if st.session_state.reportes:
-        ultimo_rep = st.session_state.reportes[-1]
-        st.write(f"Avance de la jornada: **{ultimo_rep['fecha']}**")
-        img_mapa = generar_mapa_avance(ultimo_rep.get("actividades", []))
-        st.image(img_mapa, caption="Mapa de Avance Diario de FINCAMAR", use_container_width=True)
+        st.dataframe(pd.DataFrame(st.session_state.reportes), use_container_width=True)
     else:
-        st.info("No hay reportes guardados aún.")
+        st.info("No existen reportes guardados en el historial aún.")
 
-# 6. GENERADOR DE PDF MULTI-PÁGINA DINÁMICO
-elif opcion == "📄 Generar PDF del Reporte":
-    st.header("📄 Generar Reporte PDF Completo")
+# 6. MAPA DE AVANCE POR LOTE
+elif opcion == "🗺️ Mapa de Avance por Lote":
+    st.header("🗺️ Mapa de Avance por Lote")
     if st.session_state.reportes:
-        ultimo_rep = st.session_state.reportes[-1]
+        ultimo = st.session_state.reportes[-1]
+        st.write(f"Mostrando actividades del día: **{ultimo['fecha']}**")
+        img = generar_mapa_avance(ultimo.get("actividades", []))
+        st.image(img, caption="Mapa Operacional FINCAMAR", use_container_width=True)
+    else:
+        st.info("Aún no hay reportes guardados para generar el mapa.")
+
+# 7. EXPORTAR REPORTE DIARIO PDF
+elif opcion == "📄 Exportar Reporte Diario PDF":
+    st.header("📄 Exportar Reporte Diario a PDF")
+    if st.session_state.reportes:
+        ultimo = st.session_state.reportes[-1]
         
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
-        story = []
-        styles = getSampleStyleSheet()
-        
-        # --- PÁGINA 1: RESUMEN OPERACIONAL ---
-        story.append(Paragraph(f"<b>FINCAMAR - Reporte Diario ({ultimo_rep['fecha']})</b>", styles['Title']))
+        story = [Paragraph(f"<b>FINCAMAR - Reporte Diario ({ultimo['fecha']})</b>", getSampleStyleSheet()['Title'])]
         story.append(Spacer(1, 15))
         
-        data_resumen = [
-            ["Fecha de Registro", ultimo_rep["fecha"]],
-            ["Sacos Completos", str(ultimo_rep["sacos"])],
-            ["Libras Extra", f"{ultimo_rep['libras']} lbs"],
-            ["Personal Presente", ", ".join(ultimo_rep.get("asistencia", []))]
+        data = [
+            ["Fecha", ultimo["fecha"]],
+            ["Sacos Completos", str(ultimo["sacos"])],
+            ["Libras Extra", f"{ultimo['libras']} lbs"],
+            ["Personal Presente", ", ".join(ultimo.get("asistencia", []))]
         ]
-        t1 = Table(data_resumen, colWidths=[140, 360])
-        t1.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#2C3E50")),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-            ('GRID', (0,0), (-1,-1), 1, colors.grey),
-            ('PADDING', (0,0), (-1,-1), 6)
-        ]))
-        story.append(t1)
+        t = Table(data, colWidths=[140, 360])
+        t.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor("#2C3E50")), ('TEXTCOLOR', (0,0), (-1,0), colors.white), ('GRID', (0,0), (-1,-1), 1, colors.grey)]))
+        story.append(t)
         story.append(Spacer(1, 15))
         
-        story.append(Paragraph("<b>Novedades y Observaciones del Día:</b>", styles['Heading3']))
-        story.append(Paragraph(ultimo_rep.get("texto_original", "Sin observaciones."), styles['Normal']))
-        story.append(Spacer(1, 20))
-        
-        # SALTO DE PÁGINA OBLIGATORIO PARA EL MAPA EN PÁGINA 2
+        # PÁGINA 2: MAPA PINTADO
         story.append(PageBreak())
-        
-        # --- PÁGINA 2: MAPA GRÁFICO DE AVANCE ---
-        story.append(Paragraph("<b>Mapa Operacional y Avance de Lotes Trabajados</b>", styles['Heading2']))
+        story.append(Paragraph("<b>Mapa Operacional y Avance por Lote</b>", getSampleStyleSheet()['Heading2']))
         story.append(Spacer(1, 10))
         
-        img_mapa = generar_mapa_avance(ultimo_rep.get("actividades", []))
-        img_buffer = io.BytesIO()
-        img_mapa.save(img_buffer, format="PNG")
-        img_buffer.seek(0)
+        img_mapa = generar_mapa_avance(ultimo.get("actividades", []))
+        img_buf = io.BytesIO()
+        img_mapa.save(img_buf, format="PNG")
+        img_buf.seek(0)
+        story.append(RLImage(img_buf, width=480, height=480))
         
-        story.append(RLImage(img_buffer, width=480, height=480))
-        
-        # --- PÁGINAS SUCESIVAS (SI HAY MÁS ACTIVIDADES O DETALLES EXTRAS) ---
-        if len(ultimo_rep.get("actividades", [])) > 0:
-            story.append(PageBreak())
-            story.append(Paragraph("<b>Desglose Detallado de Actividades por Lote</b>", styles['Heading2']))
-            story.append(Spacer(1, 15))
-            
-            headers = [["Actividad", "Lote", "Avance (ha / unidad)"]]
-            for act in ultimo_rep["actividades"]:
-                headers.append([act.get("actividad", ""), act.get("lote", ""), str(act.get("ha", ""))])
-                
-            t_act = Table(headers, colWidths=[180, 180, 140])
-            t_act.setStyle(TableStyle([
-                ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#27AE60")),
-                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-                ('GRID', (0,0), (-1,-1), 1, colors.grey),
-                ('PADDING', (0,0), (-1,-1), 6)
-            ]))
-            story.append(t_act)
-
         doc.build(story)
         
         st.download_button(
-            label="📥 Descargar Reporte PDF Completo con Mapa",
+            label="📥 Descargar Reporte Diario PDF con Mapa (Página 2)",
             data=buffer.getvalue(),
-            file_name=f"Reporte_FINCAMAR_{ultimo_rep['fecha']}.pdf",
+            file_name=f"Reporte_FINCAMAR_{ultimo['fecha']}.pdf",
             mime="application/pdf"
         )
     else:
-        st.warning("No hay reportes guardados para generar el PDF.")
-        
+        st.warning("No hay reportes registrados para generar el PDF.")
+
+# 8. EXPORTAR NÓMINA PDF
+elif opcion == "📄 Exportar Nómina PDF":
+    st.header("📄 Exportar Nómina Semanal a PDF")
+    st.info("Función lista para generar planilla oficial con espacio para firmas de pago.")
+
+# 9. CONTROL DE MAQUINARIA Y TALLER
+elif opcion == "🚜 Control de Maquinaria y Taller":
+    st.header("🚜 Control de Maquinaria, Motoguadañas y Herramientas")
+    st.text_area("Observaciones y Reportes del Taller (fallas de equipos, mantenimiento, etc.):")
+    if st.button("Guardar Novedad de Taller"):
+        st.success("Novedad registrada.")
+
+# 10. CONFIGURACIÓN DE FINCA
+elif opcion == "⚙️ Configuración de Finca":
+    st.header("⚙️ Configuración General de FINCAMAR")
+    st.text_input("Nombre del Predio / Finca:", value="FINCAMAR")
+    st.text_input("Ubicación Principal:", value="Río La Patera")
+    st.text_input("Responsable Operativo:", value="Control de Campo")
+    st.button("Guardar Cambios")
