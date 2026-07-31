@@ -100,7 +100,7 @@ def generar_mapa_avance(actividades_lotes, imagen_base_path="mapa_fincamar.png")
     resultado = Image.alpha_composite(base_img, overlay)
     return resultado.convert("RGB")
 
-# --- MENÚ LATERAL VISIBLE 100% (SIN DESPLEGABLE PLEGADO) ---
+# --- MENÚ LATERAL VISIBLE 100% ---
 st.sidebar.markdown("## 📌 Menú Principal FINCAMAR")
 
 opcion = st.sidebar.radio(
@@ -123,7 +123,7 @@ opcion = st.sidebar.radio(
 st.title("FINCAMAR (v10.0)")
 st.caption("Control Operacional, Cosecha, Nómina y Mapeo de Cacao")
 
-# --- CONTENIDO DE CADA SECCIÓN ENUMERADA ---
+# --- CONTENIDO DE CADA SECCIÓN ---
 
 # 1. REGISTRAR REPORTE DIARIO
 if opcion.startswith("1."):
@@ -222,11 +222,40 @@ elif opcion.startswith("4."):
         
     st.dataframe(pd.DataFrame(matriz), use_container_width=True)
 
-# 5. HISTORIAL DE REPORTES
+# 5. HISTORIAL DE REPORTES Y EXPORTAR A EXCEL CON GRÁFICOS
 elif opcion.startswith("5."):
-    st.header("📊 Historial de Reportes Guardados")
+    st.header("📊 Historial de Reportes y Análisis de Datos")
+    
     if st.session_state.reportes:
+        # Generación de Excel en Memoria
+        buffer_excel = io.BytesIO()
+        try:
+            with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer:
+                df_rep = pd.DataFrame(st.session_state.reportes)
+                df_rep.to_excel(writer, sheet_name='Reportes_Diarios', index=False)
+                
+                df_per = pd.DataFrame(st.session_state.personal)
+                df_per.to_excel(writer, sheet_name='Personal', index=False)
+
+            st.download_button(
+                label="📥 Descargar Base de Datos Completa en Excel (.xlsx)",
+                data=buffer_excel.getvalue(),
+                file_name=f"FINCAMAR_Historial_{datetime.today().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="btn_excel_historial"
+            )
+        except Exception:
+            st.warning("Para descargar en Excel asegura tener instalada la librería 'openpyxl' (`pip install openpyxl`).")
+
+        st.markdown("---")
+        st.subheader("📋 Tabla de Registros Guardados")
         st.dataframe(pd.DataFrame(st.session_state.reportes), use_container_width=True)
+
+        st.markdown("---")
+        st.subheader("📈 Gráfico Comparativo de Cosecha (Sacos por Fecha)")
+        df_graf = pd.DataFrame(st.session_state.reportes)
+        if 'sacos' in df_graf.columns and 'fecha' in df_graf.columns:
+            st.bar_chart(data=df_graf, x='fecha', y='sacos')
     else:
         st.info("No existen reportes guardados en el historial aún.")
 
