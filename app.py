@@ -9,8 +9,22 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet
 import io
 
-# Configuración de página
+# Configuración inicial de la aplicación
 st.set_page_config(page_title="FINCAMAR v10.0", page_icon="🌾", layout="wide")
+
+# --- LISTA DEFINITIVA DE OPCIONES (10 ÍTEMS) ---
+OPCIONES_MENU = (
+    "⚡ Registrar Reporte Diario",
+    "👥 Gestionar Personal",
+    "📋 Crear / Ver Tareas Nuevas",
+    "📅 Asistencia y Nómina Semanal",
+    "📊 Historial de Reportes",
+    "🗺️ Mapa de Avance por Lote",
+    "📄 Exportar Reporte Diario PDF",
+    "📄 Exportar Nómina PDF",
+    "🚜 Control de Maquinaria y Taller",
+    "⚙️ Configuración de Finca"
+)
 
 # --- BASE DE DATOS Y ESTADOS EN SESIÓN ---
 if 'reportes' not in st.session_state:
@@ -54,7 +68,7 @@ LOTES_INFO = {
     "TRES HECTAREAS": {"ha": 3.00, "bbox": (835, 805, 960, 970)}
 }
 
-# --- PARSER WHATSAPP Y GENERADOR DE MAPA ---
+# --- FUNCIONES SECUNDARIAS ---
 def procesar_texto_whatsapp(texto):
     fecha_match = re.search(r'(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4})', texto)
     fecha = fecha_match.group(1) if fecha_match else datetime.today().strftime('%Y-%m-%d')
@@ -101,20 +115,13 @@ def generar_mapa_avance(actividades_lotes, imagen_base_path="mapa_fincamar.png")
     resultado = Image.alpha_composite(base_img, overlay)
     return resultado.convert("RGB")
 
-# --- MENÚ LATERAL CON LOS 10 ÍTEMS ---
+# --- MENÚ LATERAL FORZADO CON KEY ÚNICA ---
 st.sidebar.markdown("### Seleccione Opción:")
-opcion = st.sidebar.selectbox("Seleccione Opción:", [
-    "⚡ Registrar Reporte Diario",
-    "👥 Gestionar Personal",
-    "📋 Crear / Ver Tareas Nuevas",
-    "📅 Asistencia y Nómina Semanal",
-    "📊 Historial de Reportes",
-    "🗺️ Mapa de Avance por Lote",
-    "📄 Exportar Reporte Diario PDF",
-    "📄 Exportar Nómina PDF",
-    "🚜 Control de Maquinaria y Taller",
-    "⚙️ Configuración de Finca"
-])
+opcion = st.sidebar.selectbox(
+    "Seleccione Opción:", 
+    OPCIONES_MENU, 
+    key="menu_principal_v10_fincamar"
+)
 
 st.title("FINCAMAR (v10.0)")
 st.caption("Control Operacional, Cosecha, Nómina y Mapeo de Cacao")
@@ -122,11 +129,11 @@ st.caption("Control Operacional, Cosecha, Nómina y Mapeo de Cacao")
 # 1. REGISTRAR REPORTE DIARIO
 if opcion == "⚡ Registrar Reporte Diario":
     st.header("⚡ Registrar Reporte Diario")
-    metodo = st.radio("Método de Ingreso:", ["Pegar Texto Automático", "Formulario Manual"])
+    metodo = st.radio("Método de Ingreso:", ["Pegar Texto Automático", "Formulario Manual"], key="rad_metodo")
 
     if metodo == "Pegar Texto Automático":
-        raw_text = st.text_area("Pega aquí el mensaje de WhatsApp / Finca (acepta cualquier fecha):", height=200)
-        if st.button("Procesar y Guardar Reporte"):
+        raw_text = st.text_area("Pega aquí el mensaje de WhatsApp / Finca (acepta cualquier fecha):", height=200, key="txt_wa")
+        if st.button("Procesar y Guardar Reporte", key="btn_proc_wa"):
             if raw_text:
                 rep = procesar_texto_whatsapp(raw_text)
                 st.session_state.reportes.append(rep)
@@ -134,25 +141,25 @@ if opcion == "⚡ Registrar Reporte Diario":
             else:
                 st.warning("Ingrese el texto del mensaje.")
     else:
-        fecha = st.date_input("Fecha del Reporte")
+        fecha = st.date_input("Fecha del Reporte", key="f_manual")
         col1, col2 = st.columns(2)
         with col1:
-            sacos = st.number_input("Sacos Completos", min_value=0, step=1)
+            sacos = st.number_input("Sacos Completos", min_value=0, step=1, key="sacos_m")
         with col2:
-            libras = st.number_input("Libras Extra / Parciales", min_value=0.0, step=0.5)
+            libras = st.number_input("Libras Extra / Parciales", min_value=0.0, step=0.5, key="lbs_m")
         
         st.markdown("---")
         st.subheader("Asistencia de Personal")
-        asistencia_hoy = [p["nombre"] for p in st.session_state.personal if st.checkbox(f"Asistió: {p['nombre']}", value=True)]
+        asistencia_hoy = [p["nombre"] for p in st.session_state.personal if st.checkbox(f"Asistió: {p['nombre']}", value=True, key=f"chk_{p['nombre']}") ]
 
         st.markdown("---")
         st.subheader("Actividad por Lote")
-        lote_sel = st.selectbox("Lote de Trabajo:", list(LOTES_INFO.keys()))
-        act_sel = st.selectbox("Actividad:", list(st.session_state.actividades_catalogo.keys()))
-        ha_sel = st.number_input("Avance (Hectáreas / Cantidad):", min_value=0.0, step=0.25)
-        obs = st.text_area("Observaciones Generales:")
+        lote_sel = st.selectbox("Lote de Trabajo:", list(LOTES_INFO.keys()), key="lote_m")
+        act_sel = st.selectbox("Actividad:", list(st.session_state.actividades_catalogo.keys()), key="act_m")
+        ha_sel = st.number_input("Avance (Hectáreas / Cantidad):", min_value=0.0, step=0.25, key="ha_m")
+        obs = st.text_area("Observaciones Generales:", key="obs_m")
         
-        if st.button("Guardar Reporte Manual"):
+        if st.button("Guardar Reporte Manual", key="btn_man_save"):
             st.session_state.reportes.append({
                 "fecha": fecha.strftime('%Y-%m-%d'), "sacos": sacos, "libras": libras,
                 "texto_original": obs, "asistencia": asistencia_hoy,
@@ -197,7 +204,7 @@ elif opcion == "📋 Crear / Ver Tareas Nuevas":
 # 4. ASISTENCIA Y NÓMINA SEMANAL
 elif opcion == "📅 Asistencia y Nómina Semanal":
     st.header("📅 Asistencia y Nómina Semanal")
-    lunes = st.date_input("Seleccionar Lunes de la Semana:")
+    lunes = st.date_input("Seleccionar Lunes de la Semana:", key="lun_asist")
     
     fechas = [(lunes + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
     dias_nombre = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
@@ -274,7 +281,8 @@ elif opcion == "📄 Exportar Reporte Diario PDF":
             label="📥 Descargar Reporte Diario PDF con Mapa (Página 2)",
             data=buffer.getvalue(),
             file_name=f"Reporte_FINCAMAR_{ultimo['fecha']}.pdf",
-            mime="application/pdf"
+            mime="application/pdf",
+            key="btn_dl_pdf_rep"
         )
     else:
         st.warning("No hay reportes registrados para generar el PDF.")
@@ -287,14 +295,15 @@ elif opcion == "📄 Exportar Nómina PDF":
 # 9. CONTROL DE MAQUINARIA Y TALLER
 elif opcion == "🚜 Control de Maquinaria y Taller":
     st.header("🚜 Control de Maquinaria, Motoguadañas y Herramientas")
-    st.text_area("Observaciones y Reportes del Taller (fallas de equipos, mantenimiento, etc.):")
-    if st.button("Guardar Novedad de Taller"):
+    st.text_area("Observaciones y Reportes del Taller (fallas de equipos, mantenimiento, etc.):", key="txt_taller")
+    if st.button("Guardar Novedad de Taller", key="btn_taller"):
         st.success("Novedad registrada.")
 
 # 10. CONFIGURACIÓN DE FINCA
 elif opcion == "⚙️ Configuración de Finca":
     st.header("⚙️ Configuración General de FINCAMAR")
-    st.text_input("Nombre del Predio / Finca:", value="FINCAMAR")
-    st.text_input("Ubicación Principal:", value="Río La Patera")
-    st.text_input("Responsable Operativo:", value="Control de Campo")
-    st.button("Guardar Cambios")
+    st.text_input("Nombre del Predio / Finca:", value="FINCAMAR", key="cfg_nom")
+    st.text_input("Ubicación Principal:", value="Río La Patera", key="cfg_ubi")
+    st.text_input("Responsable Operativo:", value="Control de Campo", key="cfg_resp")
+    if st.button("Guardar Cambios", key="btn_cfg_save"):
+        st.success("Configuración actualizada.")
