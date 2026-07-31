@@ -9,22 +9,8 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet
 import io
 
-# Configuración inicial de la aplicación
+# Configuración inicial de la página
 st.set_page_config(page_title="FINCAMAR v10.0", page_icon="🌾", layout="wide")
-
-# --- LISTA DEFINITIVA DE OPCIONES (10 ÍTEMS) ---
-OPCIONES_MENU = (
-    "⚡ Registrar Reporte Diario",
-    "👥 Gestionar Personal",
-    "📋 Crear / Ver Tareas Nuevas",
-    "📅 Asistencia y Nómina Semanal",
-    "📊 Historial de Reportes",
-    "🗺️ Mapa de Avance por Lote",
-    "📄 Exportar Reporte Diario PDF",
-    "📄 Exportar Nómina PDF",
-    "🚜 Control de Maquinaria y Taller",
-    "⚙️ Configuración de Finca"
-)
 
 # --- BASE DE DATOS Y ESTADOS EN SESIÓN ---
 if 'reportes' not in st.session_state:
@@ -47,7 +33,6 @@ if 'actividades_catalogo' not in st.session_state:
         "Poda": {"unidad": "ha", "color": (241, 196, 15, 130)}
     }
 
-# --- MAPEO DE COORDENADAS FINCAMAR ---
 LOTES_INFO = {
     "EUROPEA": {"ha": 2.00, "bbox": (160, 40, 480, 160)},
     "CARRETERO": {"ha": 2.00, "bbox": (20, 165, 195, 360)},
@@ -68,7 +53,7 @@ LOTES_INFO = {
     "TRES HECTAREAS": {"ha": 3.00, "bbox": (835, 805, 960, 970)}
 }
 
-# --- FUNCIONES SECUNDARIAS ---
+# --- FUNCIONES AUXILIARES ---
 def procesar_texto_whatsapp(texto):
     fecha_match = re.search(r'(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4})', texto)
     fecha = fecha_match.group(1) if fecha_match else datetime.today().strftime('%Y-%m-%d')
@@ -115,19 +100,33 @@ def generar_mapa_avance(actividades_lotes, imagen_base_path="mapa_fincamar.png")
     resultado = Image.alpha_composite(base_img, overlay)
     return resultado.convert("RGB")
 
-# --- MENÚ LATERAL FORZADO CON KEY ÚNICA ---
-st.sidebar.markdown("### Seleccione Opción:")
-opcion = st.sidebar.selectbox(
-    "Seleccione Opción:", 
-    OPCIONES_MENU, 
-    key="menu_principal_v10_fincamar"
+# --- MENÚ LATERAL VISIBLE 100% (SIN DESPLEGABLE PLEGADO) ---
+st.sidebar.markdown("## 📌 Menú Principal FINCAMAR")
+
+opcion = st.sidebar.radio(
+    "Seleccione una opción:",
+    [
+        "1. ⚡ Registrar Reporte Diario",
+        "2. 👥 Gestionar Personal",
+        "3. 📋 Crear / Ver Tareas Nuevas",
+        "4. 📅 Asistencia y Nómina Semanal",
+        "5. 📊 Historial de Reportes",
+        "6. 🗺️ Mapa de Avance por Lote",
+        "7. 📄 Exportar Reporte Diario PDF",
+        "8. 📄 Exportar Nómina PDF",
+        "9. 🚜 Control de Maquinaria y Taller",
+        "10. ⚙️ Configuración de Finca"
+    ],
+    key="menu_radio_fincamar_v10"
 )
 
 st.title("FINCAMAR (v10.0)")
 st.caption("Control Operacional, Cosecha, Nómina y Mapeo de Cacao")
 
+# --- CONTENIDO DE CADA SECCIÓN ENUMERADA ---
+
 # 1. REGISTRAR REPORTE DIARIO
-if opcion == "⚡ Registrar Reporte Diario":
+if opcion.startswith("1."):
     st.header("⚡ Registrar Reporte Diario")
     metodo = st.radio("Método de Ingreso:", ["Pegar Texto Automático", "Formulario Manual"], key="rad_metodo")
 
@@ -150,7 +149,7 @@ if opcion == "⚡ Registrar Reporte Diario":
         
         st.markdown("---")
         st.subheader("Asistencia de Personal")
-        asistencia_hoy = [p["nombre"] for p in st.session_state.personal if st.checkbox(f"Asistió: {p['nombre']}", value=True, key=f"chk_{p['nombre']}") ]
+        asistencia_hoy = [p["nombre"] for p in st.session_state.personal if st.checkbox(f"Asistió: {p['nombre']}", value=True, key=f"chk_{p['nombre']}")]
 
         st.markdown("---")
         st.subheader("Actividad por Lote")
@@ -168,7 +167,7 @@ if opcion == "⚡ Registrar Reporte Diario":
             st.success("¡Reporte guardado!")
 
 # 2. GESTIONAR PERSONAL
-elif opcion == "👥 Gestionar Personal":
+elif opcion.startswith("2."):
     st.header("👥 Gestionar Personal")
     with st.form("form_personal"):
         nom = st.text_input("Nombre Completo:")
@@ -183,7 +182,7 @@ elif opcion == "👥 Gestionar Personal":
     st.dataframe(pd.DataFrame(st.session_state.personal), use_container_width=True)
 
 # 3. CREAR / VER TAREAS NUEVAS
-elif opcion == "📋 Crear / Ver Tareas Nuevas":
+elif opcion.startswith("3."):
     st.header("📋 Crear / Ver Tareas Nuevas")
     with st.form("form_tareas"):
         nombre_tarea = st.text_input("Nombre de la Nueva Tarea:")
@@ -202,7 +201,7 @@ elif opcion == "📋 Crear / Ver Tareas Nuevas":
         st.write(f"• **{k}** — Unidad: `{v['unidad']}`")
 
 # 4. ASISTENCIA Y NÓMINA SEMANAL
-elif opcion == "📅 Asistencia y Nómina Semanal":
+elif opcion.startswith("4."):
     st.header("📅 Asistencia y Nómina Semanal")
     lunes = st.date_input("Seleccionar Lunes de la Semana:", key="lun_asist")
     
@@ -224,7 +223,7 @@ elif opcion == "📅 Asistencia y Nómina Semanal":
     st.dataframe(pd.DataFrame(matriz), use_container_width=True)
 
 # 5. HISTORIAL DE REPORTES
-elif opcion == "📊 Historial de Reportes":
+elif opcion.startswith("5."):
     st.header("📊 Historial de Reportes Guardados")
     if st.session_state.reportes:
         st.dataframe(pd.DataFrame(st.session_state.reportes), use_container_width=True)
@@ -232,7 +231,7 @@ elif opcion == "📊 Historial de Reportes":
         st.info("No existen reportes guardados en el historial aún.")
 
 # 6. MAPA DE AVANCE POR LOTE
-elif opcion == "🗺️ Mapa de Avance por Lote":
+elif opcion.startswith("6."):
     st.header("🗺️ Mapa de Avance por Lote")
     if st.session_state.reportes:
         ultimo = st.session_state.reportes[-1]
@@ -243,7 +242,7 @@ elif opcion == "🗺️ Mapa de Avance por Lote":
         st.info("Aún no hay reportes guardados para generar el mapa.")
 
 # 7. EXPORTAR REPORTE DIARIO PDF
-elif opcion == "📄 Exportar Reporte Diario PDF":
+elif opcion.startswith("7."):
     st.header("📄 Exportar Reporte Diario a PDF")
     if st.session_state.reportes:
         ultimo = st.session_state.reportes[-1]
@@ -288,19 +287,19 @@ elif opcion == "📄 Exportar Reporte Diario PDF":
         st.warning("No hay reportes registrados para generar el PDF.")
 
 # 8. EXPORTAR NÓMINA PDF
-elif opcion == "📄 Exportar Nómina PDF":
+elif opcion.startswith("8."):
     st.header("📄 Exportar Nómina Semanal a PDF")
     st.info("Función lista para generar planilla oficial con espacio para firmas de pago.")
 
 # 9. CONTROL DE MAQUINARIA Y TALLER
-elif opcion == "🚜 Control de Maquinaria y Taller":
+elif opcion.startswith("9."):
     st.header("🚜 Control de Maquinaria, Motoguadañas y Herramientas")
     st.text_area("Observaciones y Reportes del Taller (fallas de equipos, mantenimiento, etc.):", key="txt_taller")
     if st.button("Guardar Novedad de Taller", key="btn_taller"):
         st.success("Novedad registrada.")
 
 # 10. CONFIGURACIÓN DE FINCA
-elif opcion == "⚙️ Configuración de Finca":
+elif opcion.startswith("10."):
     st.header("⚙️ Configuración General de FINCAMAR")
     st.text_input("Nombre del Predio / Finca:", value="FINCAMAR", key="cfg_nom")
     st.text_input("Ubicación Principal:", value="Río La Patera", key="cfg_ubi")
