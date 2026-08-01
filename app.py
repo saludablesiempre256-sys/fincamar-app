@@ -86,7 +86,6 @@ ALIASES_LOTES = {
 # ==========================================
 def procesar_texto_inteligente(texto):
     try:
-        # Fecha
         fecha_m = re.search(r'(\d{2}[\-\/]\d{2}[\-\/]\d{4})', texto)
         fecha = fecha_m.group(1) if fecha_m else datetime.today().strftime('%d-%m-%Y')
 
@@ -94,12 +93,10 @@ def procesar_texto_inteligente(texto):
         sacos_tarde = 0
         lbs_tarde = 0.0
 
-        # Lectura de Rendimiento Mañana
         match_m = re.search(r'Rendimiento\s*Ma[ñn]ana\s*:\s*(\d+)\s*sacos', texto, re.I)
         if match_m:
             sacos_manana = int(match_m.group(1))
 
-        # Lectura de Rendimiento Tarde
         match_t = re.search(r'Rendimiento\s*Tarde\s*:\s*(\d+)\s*sacos\s*con\s*([\d\.,]+)\s*lbs', texto, re.I)
         if match_t:
             sacos_tarde = int(match_t.group(1))
@@ -108,7 +105,6 @@ def procesar_texto_inteligente(texto):
         total_sacos = sacos_manana + sacos_tarde
         total_lbs = lbs_tarde
 
-        # Asignación de Actividades por Lote
         actividades = []
         texto_upper = texto.upper()
 
@@ -123,7 +119,6 @@ def procesar_texto_inteligente(texto):
                         actividades.append({"actividad": act_nombre, "lote": lote_real})
                     break
 
-        # Filtro y Limpieza Estricta de Personal
         personal_dia = []
         lineas = texto.split('\n')
         palabras_basura = [
@@ -139,7 +134,6 @@ def procesar_texto_inteligente(texto):
                 nombre_cand = re.sub(r'^[•\-]\s*', '', line_clean).strip()
                 nombre_cand = re.sub(r'\(.*?\)', '', nombre_cand).strip()
                 
-                # Validar que no sea una palabra clave
                 if not any(p == nombre_cand.lower() for p in palabras_basura) and len(nombre_cand) > 3:
                     if "Rendimiento" not in nombre_cand and "CORTE" not in nombre_cand:
                         jornada = "Día Completo"
@@ -276,7 +270,7 @@ elif opcion.startswith("6."):
     st.image(mapa_general, caption="Estado Actual de la Finca", use_column_width=True)
 
 # ------------------------------------------
-# OPCIÓN 7: EXPORTAR REPORTE DIARIO PDF (ESTÉTICTA PERFECCIONADA + LEYENDA DEL MAPA)
+# OPCIÓN 7: EXPORTAR REPORTE DIARIO PDF
 # ------------------------------------------
 elif opcion.startswith("7."):
     st.title("📄 Exportar Reporte Diario PDF")
@@ -285,151 +279,172 @@ elif opcion.startswith("7."):
         rep = st.session_state.reporte_actual
         mapa_img = generar_mapa_coloreado(rep['actividades'])
 
-        # Convertir mapa a Base64 para incrustar en HTML
         buffered = io.BytesIO()
         mapa_img.save(buffered, format="JPEG")
         mapa_b64 = base64.b64encode(buffered.getvalue()).decode()
 
-        # Generar HTML en UTF-8 Estricto
-        html_pdf = f"""
-        <!DOCTYPE html>
-        <html lang="es">
-        <head>
-            <meta charset="UTF-8">
-            <style>
-                body {{ font-family: 'Helvetica Neue', Arial, sans-serif; margin: 15px; color: #222; background: #fff; }}
-                .title {{ color: #1b5e20; font-size: 18px; font-weight: bold; border-bottom: 2px solid #1b5e20; padding-bottom: 4px; text-transform: uppercase; }}
-                .subtitle {{ font-size: 11px; color: #555; margin-bottom: 12px; margin-top: 4px; }}
-                
-                .cards {{ display: flex; justify-content: space-between; margin-bottom: 12px; }}
-                .card {{ background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 4px; padding: 8px; width: 23%; text-align: center; }}
-                .card-title {{ font-size: 9px; color: #666; font-weight: bold; text-transform: uppercase; }}
-                .card-val {{ font-size: 16px; font-weight: bold; color: #2e7d32; margin: 3px 0; }}
-                .card-sub {{ font-size: 9px; color: #777; }}
-                
-                .sec-header {{ background: #2e7d32; color: white; font-weight: bold; padding: 5px 8px; font-size: 11px; margin-top: 12px; border-radius: 2px; }}
-                
-                table {{ width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 10px; }}
-                th {{ background: #43a047; color: white; text-align: left; padding: 5px; font-size: 10px; }}
-                td {{ border-bottom: 1px solid #eee; padding: 5px; color: #333; }}
-                
-                .badge {{ padding: 2px 6px; border-radius: 3px; font-size: 9px; font-weight: bold; display: inline-block; }}
-                .badge-green {{ background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; }}
-                .badge-blue {{ background: #e3f2fd; color: #0d47a1; border: 1px solid #bbdefb; }}
-                .badge-orange {{ background: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; }}
-                
-                .progress-box {{ background: #f9f9f9; border: 1px solid #e0e0e0; padding: 6px; margin-top: 4px; font-size: 9.5px; border-radius: 3px; }}
-                .progress-bar-bg {{ background: #e0e0e0; border-radius: 3px; height: 10px; width: 100%; margin-top: 3px; overflow: hidden; }}
-                .progress-bar-fill {{ background: #2e7d32; height: 100%; width: 93.6%; }}
-                
-                .map-container {{ text-align: center; margin-top: 10px; border: 1px solid #ddd; padding: 8px; border-radius: 4px; background: #fafafa; }}
-                .map-container img {{ width: 100%; max-width: 600px; border-radius: 3px; }}
-                
-                /* LEYENDA DEL MAPA */
-                .map-legend {{ display: flex; justify-content: center; gap: 15px; margin-top: 8px; padding-top: 6px; border-top: 1px solid #eee; font-size: 9.5px; }}
-                .legend-item {{ display: flex; align-items: center; gap: 5px; font-weight: 500; color: #444; }}
-                .dot {{ width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.2); }}
-                .dot-green {{ background: #2ecc71; }}
-                .dot-orange {{ background: #e67e22; }}
-                .dot-yellow {{ background: #f1c40f; }}
-                .dot-purple {{ background: #9b59b6; }}
-            </style>
-        </head>
-        <body>
-            <div class="title">REPORTE DIARIO DE AVANCE Y COSECHA - FINCAMAR</div>
-            <div class="subtitle">Fecha: {rep['fecha']} | Área Total: 39.00 ha | Personal Total: {len(rep['personal'])} Personas</div>
-
-            <div class="cards">
-                <div class="card">
-                    <div class="card-title">Cosecha del Día</div>
-                    <div class="card-val">{rep['total_sacos']} Sacos</div>
-                    <div class="card-sub">+ {rep['total_lbs']} lbs</div>
-                </div>
-                <div class="card">
-                    <div class="card-title">Área Cosechada Hoy</div>
-                    <div class="card-val">11 ½ ha</div>
-                    <div class="card-sub">{len(rep['actividades'])} Lotes intervenidos</div>
-                </div>
-                <div class="card">
-                    <div class="card-title">Corte de Monte Hoy</div>
-                    <div class="card-val">¾ ha</div>
-                    <div class="card-sub">Lote Los Cubos</div>
-                </div>
-                <div class="card">
-                    <div class="card-title">Personal Activo</div>
-                    <div class="card-val">{len(rep['personal'])} Personas</div>
-                    <div class="card-sub">Cuadrilla completa</div>
-                </div>
-            </div>
-
-            <div class="sec-header">1. CONTROL DE COSECHA Y RENDIMIENTO</div>
-            <table>
-                <tr>
-                    <th>TURNO / DETALLE</th>
-                    <th>SACOS COSECHADOS</th>
-                    <th>LIBRAS ADICIONALES</th>
-                    <th>TOTAL ACUMULADO</th>
-                </tr>
-                <tr>
-                    <td>Turno Mañana</td>
-                    <td>{rep['sacos_manana']} sacos</td>
-                    <td>0.00 lbs</td>
-                    <td>{rep['sacos_manana']} sacos</td>
-                </tr>
-                <tr>
-                    <td>Turno Tarde</td>
-                    <td>{rep['sacos_tarde']} sacos</td>
-                    <td>{rep['lbs_tarde']} lbs</td>
-                    <td>{rep['sacos_tarde']} sacos + {rep['lbs_tarde']} lbs</td>
-                </tr>
-                <tr style="font-weight: bold; background: #f5f5f5;">
-                    <td>TOTAL DÍA</td>
-                    <td>{rep['total_sacos']} sacos</td>
-                    <td>{rep['total_lbs']} lbs</td>
-                    <td>{rep['total_sacos']} sacos + {rep['total_lbs']} lbs</td>
-                </tr>
-            </table>
-
-            <div class="progress-box">
-                <b>Lotes Cosechados Hoy (11 ½ ha):</b> Cambursillo, Línea Dos, Los Cubos, El Mango, Manuel y La Isla (1 ha abarcaron).<br>
-                <b>Pendiente Cosecha (2 ½ ha):</b> Únicamente resta completar el lote La Isla (2 ½ ha pendientes).<br>
-                <div style="margin-top: 3px;"><b>Progreso Total Cosecha (39.00 ha):</b> Realizado 36 ½ ha (93.6%) | Pendiente 2 ½ ha (6.4%)</div>
-                <div class="progress-bar-bg"><div class="progress-bar-fill"></div></div>
-            </div>
-
-            <div class="sec-header">2. ASISTENCIA Y DISTRIBUCIÓN DE PERSONAL ({len(rep['personal'])} PERSONAS)</div>
-            <table>
-                <tr>
-                    <th>TRABAJADOR</th>
-                    <th>LABOR PRINCIPAL</th>
-                    <th>JORNADA / HORARIO</th>
-                </tr>
-        """
-
+        # CONSTRUCCIÓN PREVIA DE FILAS DE TRABAJADORES (SIN CONCATENAR CADENAS EN TRIPLE COMILLA)
+        filas_personal = ""
         for p in rep['personal']:
             badge_class = "badge-green"
-            if "3:00" in p.get('jornada', ''):
+            jornada_txt = p.get('jornada', 'Día Completo')
+            if "3:00" in jornada_txt:
                 badge_class = "badge-blue"
-            elif "Tarde" in p.get('jornada', ''):
+            elif "Tarde" in jornada_txt:
                 badge_class = "badge-orange"
 
-            html_pdf += f"""
-                <tr>
-                    <td><b>{p['nombre']}</b></td>
-                    <td>Cosecha / Mantenimiento</td>
-                    <td><span class="badge {badge_class}">{p.get('jornada', 'Día Completo')}</span></td>
-                </tr>
+            filas_personal += f"""
+            <tr>
+                <td><b>{p['nombre']}</b></td>
+                <td>Cosecha / Mantenimiento</td>
+                <td><span class="badge {badge_class}">{jornada_txt}</span></td>
+            </tr>
             """
 
-        html_pdf += f"""
-            </table>
+        # HTML PRINCIPAL LIMPIO
+        html_pdf = f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {{ font-family: 'Helvetica Neue', Arial, sans-serif; margin: 15px; color: #222; background: #fff; }}
+        .title {{ color: #1b5e20; font-size: 18px; font-weight: bold; border-bottom: 2px solid #1b5e20; padding-bottom: 4px; text-transform: uppercase; }}
+        .subtitle {{ font-size: 11px; color: #555; margin-bottom: 12px; margin-top: 4px; }}
+        .cards {{ display: flex; justify-content: space-between; margin-bottom: 12px; }}
+        .card {{ background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 4px; padding: 8px; width: 23%; text-align: center; }}
+        .card-title {{ font-size: 9px; color: #666; font-weight: bold; text-transform: uppercase; }}
+        .card-val {{ font-size: 16px; font-weight: bold; color: #2e7d32; margin: 3px 0; }}
+        .card-sub {{ font-size: 9px; color: #777; }}
+        .sec-header {{ background: #2e7d32; color: white; font-weight: bold; padding: 5px 8px; font-size: 11px; margin-top: 12px; border-radius: 2px; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 10px; }}
+        th {{ background: #43a047; color: white; text-align: left; padding: 5px; font-size: 10px; }}
+        td {{ border-bottom: 1px solid #eee; padding: 5px; color: #333; }}
+        .badge {{ padding: 2px 6px; border-radius: 3px; font-size: 9px; font-weight: bold; display: inline-block; }}
+        .badge-green {{ background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; }}
+        .badge-blue {{ background: #e3f2fd; color: #0d47a1; border: 1px solid #bbdefb; }}
+        .badge-orange {{ background: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; }}
+        .progress-box {{ background: #f9f9f9; border: 1px solid #e0e0e0; padding: 6px; margin-top: 4px; font-size: 9.5px; border-radius: 3px; }}
+        .progress-bar-bg {{ background: #e0e0e0; border-radius: 3px; height: 10px; width: 100%; margin-top: 3px; overflow: hidden; }}
+        .progress-bar-fill {{ background: #2e7d32; height: 100%; width: 93.6%; }}
+        .map-container {{ text-align: center; margin-top: 10px; border: 1px solid #ddd; padding: 8px; border-radius: 4px; background: #fafafa; }}
+        .map-container img {{ width: 100%; max-width: 600px; border-radius: 3px; }}
+        .map-legend {{ display: flex; justify-content: center; gap: 15px; margin-top: 8px; padding-top: 6px; border-top: 1px solid #eee; font-size: 9.5px; }}
+        .legend-item {{ display: flex; align-items: center; gap: 5px; font-weight: 500; color: #444; }}
+        .dot {{ width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.2); }}
+        .dot-green {{ background: #2ecc71; }}
+        .dot-orange {{ background: #e67e22; }}
+        .dot-yellow {{ background: #f1c40f; }}
+        .dot-purple {{ background: #9b59b6; }}
+    </style>
+</head>
+<body>
+    <div class="title">REPORTE DIARIO DE AVANCE Y COSECHA - FINCAMAR</div>
+    <div class="subtitle">Fecha: {rep['fecha']} | Área Total: 39.00 ha | Personal Total: {len(rep['personal'])} Personas</div>
 
-            <div class="sec-header">3. MAPA OPERACIONAL Y LEYENDA DE AVANCE DE FINCA</div>
-            <div class="map-container">
-                <img src="data:image/jpeg;base64,{mapa_b64}" />
-                
-                <!-- LEYENDA EXPLICATIVA DE COLORES -->
-                <div class="map-legend">
-                    <div class="legend-item"><span class="dot dot-green"></span> Áreas Cosechadas Hoy</div>
-                    <div class="legend-item"><span class="dot dot-orange"></span> Corte de Monte / Mantenimiento</div>
-                    <div class="legend-item"><span class="dot dot-yellow"></s
+    <div class="cards">
+        <div class="card">
+            <div class="card-title">Cosecha del Día</div>
+            <div class="card-val">{rep['total_sacos']} Sacos</div>
+            <div class="card-sub">+ {rep['total_lbs']} lbs</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Área Cosechada Hoy</div>
+            <div class="card-val">11 ½ ha</div>
+            <div class="card-sub">{len(rep['actividades'])} Lotes intervenidos</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Corte de Monte Hoy</div>
+            <div class="card-val">¾ ha</div>
+            <div class="card-sub">Lote Los Cubos</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Personal Activo</div>
+            <div class="card-val">{len(rep['personal'])} Personas</div>
+            <div class="card-sub">Cuadrilla completa</div>
+        </div>
+    </div>
+
+    <div class="sec-header">1. CONTROL DE COSECHA Y RENDIMIENTO</div>
+    <table>
+        <tr>
+            <th>TURNO / DETALLE</th>
+            <th>SACOS COSECHADOS</th>
+            <th>LIBRAS ADICIONALES</th>
+            <th>TOTAL ACUMULADO</th>
+        </tr>
+        <tr>
+            <td>Turno Mañana</td>
+            <td>{rep['sacos_manana']} sacos</td>
+            <td>0.00 lbs</td>
+            <td>{rep['sacos_manana']} sacos</td>
+        </tr>
+        <tr>
+            <td>Turno Tarde</td>
+            <td>{rep['sacos_tarde']} sacos</td>
+            <td>{rep['lbs_tarde']} lbs</td>
+            <td>{rep['sacos_tarde']} sacos + {rep['lbs_tarde']} lbs</td>
+        </tr>
+        <tr style="font-weight: bold; background: #f5f5f5;">
+            <td>TOTAL DÍA</td>
+            <td>{rep['total_sacos']} sacos</td>
+            <td>{rep['total_lbs']} lbs</td>
+            <td>{rep['total_sacos']} sacos + {rep['total_lbs']} lbs</td>
+        </tr>
+    </table>
+
+    <div class="progress-box">
+        <b>Lotes Cosechados Hoy (11 ½ ha):</b> Cambursillo, Línea Dos, Los Cubos, El Mango, Manuel y La Isla (1 ha abarcaron).<br>
+        <b>Pendiente Cosecha (2 ½ ha):</b> Únicamente resta completar el lote La Isla (2 ½ ha pendientes).<br>
+        <div style="margin-top: 3px;"><b>Progreso Total Cosecha (39.00 ha):</b> Realizado 36 ½ ha (93.6%) | Pendiente 2 ½ ha (6.4%)</div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill"></div></div>
+    </div>
+
+    <div class="sec-header">2. ASISTENCIA Y DISTRIBUCIÓN DE PERSONAL ({len(rep['personal'])} PERSONAS)</div>
+    <table>
+        <tr>
+            <th>TRABAJADOR</th>
+            <th>LABOR PRINCIPAL</th>
+            <th>JORNADA / HORARIO</th>
+        </tr>
+        {filas_personal}
+    </table>
+
+    <div class="sec-header">3. MAPA OPERACIONAL Y LEYENDA DE AVANCE DE FINCA</div>
+    <div class="map-container">
+        <img src="data:image/jpeg;base64,{mapa_b64}" />
+        <div class="map-legend">
+            <div class="legend-item"><span class="dot dot-green"></span> Áreas Cosechadas Hoy</div>
+            <div class="legend-item"><span class="dot dot-orange"></span> Corte de Monte / Mantenimiento</div>
+            <div class="legend-item"><span class="dot dot-yellow"></span> Tumbada de Monilla</div>
+            <div class="legend-item"><span class="dot dot-purple"></span> Desvenado</div>
+        </div>
+    </div>
+    
+    <div style="text-align: center; font-size: 8px; color: #999; margin-top: 10px;">
+        Documento de control diario generado automáticamente por el Sistema Agrícola CACAOMAR.
+    </div>
+</body>
+</html>"""
+
+        st.components.v1.html(html_pdf, height=850, scrolling=True)
+
+        st.download_button(
+            label="📥 Descargar Reporte PDF Oficial Completo",
+            data=html_pdf,
+            file_name=f"Reporte_Diario_{rep['fecha']}.html",
+            mime="text/html"
+        )
+    else:
+        st.warning("⚠️ Primero debes ingresar y procesar un reporte en la Opción 1 para poder exportarlo.")
+
+# ------------------------------------------
+# OPCIONES 8, 9, 10
+# ------------------------------------------
+elif opcion.startswith("8."):
+    st.title("📄 Exportar Nómina PDF")
+
+elif opcion.startswith("9."):
+    st.title("🚜 Control de Maquinaria y Taller")
+
+elif opcion.startswith("10."):
+    st.title("⚙️ Configuración de Finca")
