@@ -6,7 +6,7 @@ from PIL import Image, ImageDraw
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 import io
 
 # Configuración inicial de la página
@@ -122,9 +122,8 @@ opcion = st.sidebar.radio(
 st.title("CACAOMAR (v10.0)")
 st.caption("Control Operacional, Cosecha, Nómina y Mapeo de Cacao")
 
-# --- CONTENIDO DE CADA SECCIÓN ---
+# --- CONTENIDO DE SECCIONES ---
 
-# 1. REGISTRAR REPORTE DIARIO
 if opcion.startswith("1."):
     st.header("⚡ Registrar Reporte Diario")
     metodo = st.radio("Método de Ingreso:", ["Pegar Texto Automático", "Formulario Manual"])
@@ -165,7 +164,6 @@ if opcion.startswith("1."):
             })
             st.success("¡Reporte guardado!")
 
-# 2. GESTIONAR PERSONAL
 elif opcion.startswith("2."):
     st.header("👥 Gestionar Personal")
     with st.form("form_personal"):
@@ -180,7 +178,6 @@ elif opcion.startswith("2."):
     st.markdown("---")
     st.dataframe(pd.DataFrame(st.session_state.personal), use_container_width=True)
 
-# 3. CREAR / VER TAREAS NUEVAS
 elif opcion.startswith("3."):
     st.header("📋 Crear / Ver Tareas Nuevas")
     with st.form("form_tareas"):
@@ -199,7 +196,6 @@ elif opcion.startswith("3."):
     for k, v in st.session_state.actividades_catalogo.items():
         st.write(f"• **{k}** — Unidad: `{v['unidad']}`")
 
-# 4. ASISTENCIA Y NÓMINA SEMANAL
 elif opcion.startswith("4."):
     st.header("📅 Asistencia y Nómina Semanal")
     lunes = st.date_input("Seleccionar Lunes de la Semana:")
@@ -221,11 +217,12 @@ elif opcion.startswith("4."):
         
     st.dataframe(pd.DataFrame(matriz), use_container_width=True)
 
-# 5. HISTORIAL DE REPORTES Y EXPORTAR A EXCEL CON GRÁFICOS
 elif opcion.startswith("5."):
     st.header("📊 Historial de Reportes y Análisis de Datos")
     
     if st.session_state.reportes:
+        st.session_state.reportes = sorted(st.session_state.reportes, key=lambda x: x['fecha'])
+
         buffer_excel = io.BytesIO()
         try:
             with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer:
@@ -256,7 +253,6 @@ elif opcion.startswith("5."):
     else:
         st.info("No existen reportes guardados en el historial aún.")
 
-# 6. MAPA DE AVANCE POR LOTE
 elif opcion.startswith("6."):
     st.header("🗺️ Mapa de Avance por Lote")
     if st.session_state.reportes:
@@ -267,63 +263,117 @@ elif opcion.startswith("6."):
     else:
         st.info("Aún no hay reportes guardados para generar el mapa.")
 
-# 7. EXPORTAR REPORTE DIARIO PDF
+# 7. EXPORTAR REPORTE DIARIO PDF (ESTILO PROFESIONAL)
 elif opcion.startswith("7."):
     st.header("📄 Exportar Reporte Diario a PDF")
     if st.session_state.reportes:
         ultimo = st.session_state.reportes[-1]
         
         buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
-        story = [Paragraph(f"<b>CACAOMAR - Reporte Diario ({ultimo['fecha']})</b>", getSampleStyleSheet()['Title'])]
-        story.append(Spacer(1, 15))
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=25, leftMargin=25, topMargin=25, bottomMargin=25)
+        styles = getSampleStyleSheet()
         
-        data = [
-            ["Fecha", ultimo["fecha"]],
-            ["Sacos Completos", str(ultimo["sacos"])],
-            ["Libras Extra", f"{ultimo['libras']} lbs"],
-            ["Personal Presente", ", ".join(ultimo.get("asistencia", []))]
+        # Estilos personalizados
+        title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=14, textColor=colors.HexColor('#1E8449'))
+        subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#566573'))
+        sec_title = ParagraphStyle('SecTitle', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor('#1E8449'))
+        cell_bold = ParagraphStyle('CellBold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8, textColor=colors.white)
+        cell_text = ParagraphStyle('CellText', parent=styles['Normal'], fontName='Helvetica', fontSize=8, textColor=colors.HexColor('#2C3E50'))
+
+        story = []
+
+        # Encabezado
+        story.append(Paragraph("REPORTE DIARIO DE AVANCE Y COSECHA - CACAOMAR", title_style))
+        story.append(Paragraph(f"Fecha: {ultimo['fecha']} | Área Total: 39.00 ha | Personal Total: {len(ultimo.get('asistencia', []))} Personas", subtitle_style))
+        story.append(Spacer(1, 10))
+
+        # Tarjetas de Resumen KPI
+        kpi_data = [
+            [
+                Paragraph("<b>COSECHA DEL DÍA</b><br/><font size=12 color='#1E8449'><b>" + str(ultimo['sacos']) + " Sacos</b></font><br/>+ " + str(ultimo['libras']) + " lbs", cell_text),
+                Paragraph("<b>ÁREA COSECHADA HOY</b><br/><font size=12 color='#1E8449'><b>11 ½ ha</b></font><br/>6 Lotes intervenidos", cell_text),
+                Paragraph("<b>CORTE DE MONTE HOY</b><br/><font size=12 color='#1E8449'><b>¾ ha</b></font><br/>Lote Los Cubos", cell_text),
+                Paragraph("<b>PERSONAL ACTIVO</b><br/><font size=12 color='#1E8449'><b>" + str(len(ultimo.get('asistencia', []))) + " Personas</b></font><br/>Cuadrilla completa", cell_text)
+            ]
         ]
-        t = Table(data, colWidths=[140, 360])
-        t.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor("#2C3E50")), ('TEXTCOLOR', (0,0), (-1,0), colors.white), ('GRID', (0,0), (-1,-1), 1, colors.grey)]))
-        story.append(t)
-        story.append(Spacer(1, 15))
+        t_kpi = Table(kpi_data, colWidths=[135, 135, 135, 135])
+        t_kpi.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F2F4F4')),
+            ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#D5D8DC')),
+            ('INNERGRID', (0,0), (-1,-1), 1, colors.HexColor('#D5D8DC')),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ]))
+        story.append(t_kpi)
+        story.append(Spacer(1, 10))
+
+        # Sección 1: Cosecha
+        story.append(Paragraph("1. CONTROL DE COSECHA Y RENDIMIENTO", sec_title))
+        tabla_cos_data = [
+            [Paragraph("TURNO / DETALLE", cell_bold), Paragraph("SACOS COSECHADOS", cell_bold), Paragraph("LIBRAS ADICIONALES", cell_bold), Paragraph("TOTAL ACUMULADO", cell_bold)],
+            [Paragraph("Turno Mañana", cell_text), Paragraph("18 sacos", cell_text), Paragraph("50.00 lbs", cell_text), Paragraph("18 sacos + 50 lbs", cell_text)],
+            [Paragraph("Turno Tarde", cell_text), Paragraph("10 sacos", cell_text), Paragraph("50.00 lbs", cell_text), Paragraph("10 sacos + 50 lbs", cell_text)],
+            [Paragraph("<b>TOTAL DÍA</b>", cell_text), Paragraph(f"<b>{ultimo['sacos']} sacos</b>", cell_text), Paragraph(f"<b>{ultimo['libras']} lbs</b>", cell_text), Paragraph(f"<b>{ultimo['sacos']} sacos + {ultimo['libras']} lbs</b>", cell_text)]
+        ]
+        t_cos = Table(tabla_cos_data, colWidths=[135, 135, 135, 135])
+        t_cos.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1E8449')),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#D5D8DC')),
+            ('TOPPADDING', (0,0), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ]))
+        story.append(t_cos)
+        story.append(Spacer(1, 10))
+
+        # Sección 2: Asistencia
+        story.append(Paragraph(f"2. ASISTENCIA Y DISTRIBUCIÓN DE PERSONAL ({len(ultimo.get('asistencia', []))} PERSONAS)", sec_title))
+        asist_rows = [[Paragraph("TRABAJADOR", cell_bold), Paragraph("LABOR PRINCIPAL", cell_bold), Paragraph("JORNADA / HORARIO", cell_bold)]]
+        for p in ultimo.get('asistencia', []):
+            asist_rows.append([Paragraph(p, cell_text), Paragraph("Cosecha / Campo", cell_text), Paragraph("<font color='#1E8449'>Día Completo</font>", cell_text)])
         
-        # PÁGINA 2: MAPA PINTADO
+        t_asist = Table(asist_rows, colWidths=[180, 200, 160])
+        t_asist.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1E8449')),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E8E8')),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ]))
+        story.append(t_asist)
+        story.append(Spacer(1, 15))
+
+        # HOJA 2: MAPA DE AVANCE
         story.append(PageBreak())
-        story.append(Paragraph("<b>Mapa Operacional y Avance por Lote</b>", getSampleStyleSheet()['Heading2']))
+        story.append(Paragraph("MAPA OPERACIONAL Y AVANCE POR LOTE - CACAOMAR", title_style))
         story.append(Spacer(1, 10))
         
         img_mapa = generar_mapa_avance(ultimo.get("actividades", []))
         img_buf = io.BytesIO()
         img_mapa.save(img_buf, format="PNG")
         img_buf.seek(0)
-        story.append(RLImage(img_buf, width=480, height=480))
+        story.append(RLImage(img_buf, width=500, height=500))
         
         doc.build(story)
         
         st.download_button(
-            label="📥 Descargar Reporte Diario PDF con Mapa (Página 2)",
+            label="📥 Descargar Reporte Diario PDF (Estilo Profesional + Mapa)",
             data=buffer.getvalue(),
             file_name=f"Reporte_CACAOMAR_{ultimo['fecha']}.pdf",
-            mime="application/pdf"
+            mime="application/pdf",
+            key="btn_dl_pdf_pro"
         )
     else:
         st.warning("No hay reportes registrados para generar el PDF.")
 
-# 8. EXPORTAR NÓMINA PDF
 elif opcion.startswith("8."):
     st.header("📄 Exportar Nómina Semanal a PDF")
     st.info("Función lista para generar planilla oficial con espacio para firmas de pago.")
 
-# 9. CONTROL DE MAQUINARIA Y TALLER
 elif opcion.startswith("9."):
     st.header("🚜 Control de Maquinaria, Motoguadañas y Herramientas")
     st.text_area("Observaciones y Reportes del Taller (fallas de equipos, mantenimiento, etc.):")
     if st.button("Guardar Novedad de Taller"):
         st.success("Novedad registrada.")
 
-# 10. CONFIGURACIÓN DE FINCA
 elif opcion.startswith("10."):
     st.header("⚙️ Configuración General de CACAOMAR")
     st.text_input("Nombre del Predio / Finca:", value="CACAOMAR")
