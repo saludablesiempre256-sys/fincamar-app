@@ -83,11 +83,9 @@ ALIASES_LOTES = {
 # --- PROCESAMIENTO ROBUSTO DE REPORTES ---
 def procesar_texto_inteligente(texto):
     try:
-        # Fecha
         fecha_m = re.search(r'(\d{2}[\-\/]\d{2}[\-\/]\d{4})', texto)
         fecha = fecha_m.group(1) if fecha_m else datetime.today().strftime('%d-%m-%Y')
 
-        # Conteo de sacos y libras
         total_sacos = 0
         total_lbs = 0.0
 
@@ -106,7 +104,6 @@ def procesar_texto_inteligente(texto):
                 if match_global.group(2):
                     total_lbs = float(match_global.group(2).replace(',', '.'))
 
-        # Detección de lotes
         actividades = []
         texto_upper = texto.upper()
 
@@ -121,7 +118,6 @@ def procesar_texto_inteligente(texto):
                         actividades.append({"actividad": act_nombre, "lote": lote_real})
                     break
 
-        # Detección de personal
         nombres_existentes = [p["nombre"].lower() for p in st.session_state.personal]
         personal_dia = []
 
@@ -279,36 +275,57 @@ elif opcion.startswith("6."):
     st.image(mapa_general, caption="Estado Actual de la Finca", use_column_width=True)
 
 # ------------------------------------------
-# OPCIÓN 7: EXPORTAR REPORTE DIARIO PDF (CORREGIDO)
+# OPCIÓN 7: EXPORTAR REPORTE DIARIO PDF / DOCUMENTO (DESCARGA REAL CORREGIDA)
 # ------------------------------------------
 elif opcion.startswith("7."):
     st.title("📄 Exportar Reporte Diario PDF")
     
     if st.session_state.reporte_actual:
         rep = st.session_state.reporte_actual
-        st.subheader(f"Vista previa para PDF - Fecha: {rep['fecha']}")
+        st.subheader(f"Vista previa de descarga - Fecha: {rep['fecha']}")
         
-        st.markdown(f"""
-        **Resumen de Cosecha:**
-        * Total Sacos: {rep['total_sacos']}
-        * Total Libras: {rep['total_lbs']} lbs
-        * Lotes Procesados: {len(rep['actividades'])}
-        * Personal Activo: {len(rep['personal'])}
-        """)
-        
-        st.text_area("Texto del Reporte:", value=rep['texto_raw'], height=200, disabled=True)
-        
-        if st.button("Generar PDF del Reporte"):
-            st.success("¡Documento listo para guardar/imprimir!")
+        # Generar contenido del documento imprimible/descargable
+        contenido_reporte = f"""==================================================
+              FINCA CACAOMAR
+       REPORTE DIARIO DE OPERACIONES
+==================================================
+Fecha: {rep['fecha']}
+
+[RESUMEN DE PRODUCCIÓN]
+- Total Sacos Cosechados: {rep['total_sacos']}
+- Libras Fracción: {rep['total_lbs']} lbs
+- Lotes Trabajados: {len(rep['actividades'])}
+- Personal Presente: {len(rep['personal'])} personas
+
+[DETALLE DE ACTIVIDADES Y LOTES]
+"""
+        for act in rep['actividades']:
+            contenido_reporte += f"• Actividad: {act['actividad']} | Lote: {act['lote']}\n"
+
+        contenido_reporte += "\n[PERSONAL DETECTADO]\n"
+        for p in rep['personal']:
+            contenido_reporte += f"• {p['nombre']} ({p['asistencia']})\n"
+
+        contenido_reporte += f"\n[TEXTO ORIGINAL DEL INFORME]\n{rep['texto_raw']}\n"
+        contenido_reporte += "=================================================="
+
+        st.text_area("Contenido del Reporte:", value=contenido_reporte, height=250)
+
+        # BOTÓN OFICIAL DE DESCARGA EN EL CELULAR/SISTEMA
+        st.download_button(
+            label="📥 Descargar Reporte Diario (.txt / .pdf)",
+            data=contenido_reporte,
+            file_name=f"Reporte_CACAOMAR_{rep['fecha']}.txt",
+            mime="text/plain"
+        )
     else:
-        st.warning("⚠️ Primero debes ingresar y procesar un reporte en la Opción 1 para poder exportarlo.")
+        st.warning("⚠️ Primero debes ingresar y procesar un reporte en la Opción 1 para poder descargarlo.")
 
 # ------------------------------------------
 # RESTO DE MÓDULOS (4, 8, 9, 10)
 # ------------------------------------------
 elif opcion.startswith("4."):
     st.title("📅 Asistencia y Nómina Semanal")
-    st.info("Módulo de asistencia sincronizado con reportes diarios.")
 
 elif opcion.startswith("8."):
     st.title("📄 Exportar Nómina PDF")
