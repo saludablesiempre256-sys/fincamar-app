@@ -10,7 +10,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 import io
 
 # Configuración inicial de la página
-st.set_page_config(page_title="FINCAMAR v10.0", page_icon="🌾", layout="wide")
+st.set_page_config(page_title="CACAOMAR v10.0", page_icon="🌾", layout="wide")
 
 # --- BASE DE DATOS Y ESTADOS EN SESIÓN ---
 if 'reportes' not in st.session_state:
@@ -101,7 +101,7 @@ def generar_mapa_avance(actividades_lotes, imagen_base_path="mapa_fincamar.png")
     return resultado.convert("RGB")
 
 # --- MENÚ LATERAL VISIBLE 100% ---
-st.sidebar.markdown("## 📌 Menú Principal FINCAMAR")
+st.sidebar.markdown("## 📌 Menú Principal CACAOMAR")
 
 opcion = st.sidebar.radio(
     "Seleccione una opción:",
@@ -116,11 +116,10 @@ opcion = st.sidebar.radio(
         "8. 📄 Exportar Nómina PDF",
         "9. 🚜 Control de Maquinaria y Taller",
         "10. ⚙️ Configuración de Finca"
-    ],
-    key="menu_radio_fincamar_v10"
+    ]
 )
 
-st.title("FINCAMAR (v10.0)")
+st.title("CACAOMAR (v10.0)")
 st.caption("Control Operacional, Cosecha, Nómina y Mapeo de Cacao")
 
 # --- CONTENIDO DE CADA SECCIÓN ---
@@ -128,11 +127,11 @@ st.caption("Control Operacional, Cosecha, Nómina y Mapeo de Cacao")
 # 1. REGISTRAR REPORTE DIARIO
 if opcion.startswith("1."):
     st.header("⚡ Registrar Reporte Diario")
-    metodo = st.radio("Método de Ingreso:", ["Pegar Texto Automático", "Formulario Manual"], key="rad_metodo")
+    metodo = st.radio("Método de Ingreso:", ["Pegar Texto Automático", "Formulario Manual"])
 
     if metodo == "Pegar Texto Automático":
-        raw_text = st.text_area("Pega aquí el mensaje de WhatsApp / Finca (acepta cualquier fecha):", height=200, key="txt_wa")
-        if st.button("Procesar y Guardar Reporte", key="btn_proc_wa"):
+        raw_text = st.text_area("Pega aquí el mensaje de WhatsApp / Finca (acepta cualquier fecha):", height=200)
+        if st.button("Procesar y Guardar Reporte"):
             if raw_text:
                 rep = procesar_texto_whatsapp(raw_text)
                 st.session_state.reportes.append(rep)
@@ -140,25 +139,25 @@ if opcion.startswith("1."):
             else:
                 st.warning("Ingrese el texto del mensaje.")
     else:
-        fecha = st.date_input("Fecha del Reporte", key="f_manual")
+        fecha = st.date_input("Fecha del Reporte")
         col1, col2 = st.columns(2)
         with col1:
-            sacos = st.number_input("Sacos Completos", min_value=0, step=1, key="sacos_m")
+            sacos = st.number_input("Sacos Completos", min_value=0, step=1)
         with col2:
-            libras = st.number_input("Libras Extra / Parciales", min_value=0.0, step=0.5, key="lbs_m")
+            libras = st.number_input("Libras Extra / Parciales", min_value=0.0, step=0.5)
         
         st.markdown("---")
         st.subheader("Asistencia de Personal")
-        asistencia_hoy = [p["nombre"] for p in st.session_state.personal if st.checkbox(f"Asistió: {p['nombre']}", value=True, key=f"chk_{p['nombre']}")]
+        asistencia_hoy = [p["nombre"] for p in st.session_state.personal if st.checkbox(f"Asistió: {p['nombre']}", value=True)]
 
         st.markdown("---")
         st.subheader("Actividad por Lote")
-        lote_sel = st.selectbox("Lote de Trabajo:", list(LOTES_INFO.keys()), key="lote_m")
-        act_sel = st.selectbox("Actividad:", list(st.session_state.actividades_catalogo.keys()), key="act_m")
-        ha_sel = st.number_input("Avance (Hectáreas / Cantidad):", min_value=0.0, step=0.25, key="ha_m")
-        obs = st.text_area("Observaciones Generales:", key="obs_m")
+        lote_sel = st.selectbox("Lote de Trabajo:", list(LOTES_INFO.keys()))
+        act_sel = st.selectbox("Actividad:", list(st.session_state.actividades_catalogo.keys()))
+        ha_sel = st.number_input("Avance (Hectáreas / Cantidad):", min_value=0.0, step=0.25)
+        obs = st.text_area("Observaciones Generales:")
         
-        if st.button("Guardar Reporte Manual", key="btn_man_save"):
+        if st.button("Guardar Reporte Manual"):
             st.session_state.reportes.append({
                 "fecha": fecha.strftime('%Y-%m-%d'), "sacos": sacos, "libras": libras,
                 "texto_original": obs, "asistencia": asistencia_hoy,
@@ -203,7 +202,7 @@ elif opcion.startswith("3."):
 # 4. ASISTENCIA Y NÓMINA SEMANAL
 elif opcion.startswith("4."):
     st.header("📅 Asistencia y Nómina Semanal")
-    lunes = st.date_input("Seleccionar Lunes de la Semana:", key="lun_asist")
+    lunes = st.date_input("Seleccionar Lunes de la Semana:")
     
     fechas = [(lunes + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
     dias_nombre = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
@@ -227,7 +226,6 @@ elif opcion.startswith("5."):
     st.header("📊 Historial de Reportes y Análisis de Datos")
     
     if st.session_state.reportes:
-        # Generación de Excel en Memoria
         buffer_excel = io.BytesIO()
         try:
             with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer:
@@ -240,9 +238,8 @@ elif opcion.startswith("5."):
             st.download_button(
                 label="📥 Descargar Base de Datos Completa en Excel (.xlsx)",
                 data=buffer_excel.getvalue(),
-                file_name=f"FINCAMAR_Historial_{datetime.today().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="btn_excel_historial"
+                file_name=f"CACAOMAR_Historial_{datetime.today().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         except Exception:
             st.warning("Para descargar en Excel asegura tener instalada la librería 'openpyxl' (`pip install openpyxl`).")
@@ -266,7 +263,7 @@ elif opcion.startswith("6."):
         ultimo = st.session_state.reportes[-1]
         st.write(f"Mostrando actividades del día: **{ultimo['fecha']}**")
         img = generar_mapa_avance(ultimo.get("actividades", []))
-        st.image(img, caption="Mapa Operacional FINCAMAR", use_container_width=True)
+        st.image(img, caption="Mapa Operacional CACAOMAR", use_container_width=True)
     else:
         st.info("Aún no hay reportes guardados para generar el mapa.")
 
@@ -278,7 +275,7 @@ elif opcion.startswith("7."):
         
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
-        story = [Paragraph(f"<b>FINCAMAR - Reporte Diario ({ultimo['fecha']})</b>", getSampleStyleSheet()['Title'])]
+        story = [Paragraph(f"<b>CACAOMAR - Reporte Diario ({ultimo['fecha']})</b>", getSampleStyleSheet()['Title'])]
         story.append(Spacer(1, 15))
         
         data = [
@@ -308,9 +305,8 @@ elif opcion.startswith("7."):
         st.download_button(
             label="📥 Descargar Reporte Diario PDF con Mapa (Página 2)",
             data=buffer.getvalue(),
-            file_name=f"Reporte_FINCAMAR_{ultimo['fecha']}.pdf",
-            mime="application/pdf",
-            key="btn_dl_pdf_rep"
+            file_name=f"Reporte_CACAOMAR_{ultimo['fecha']}.pdf",
+            mime="application/pdf"
         )
     else:
         st.warning("No hay reportes registrados para generar el PDF.")
@@ -323,15 +319,15 @@ elif opcion.startswith("8."):
 # 9. CONTROL DE MAQUINARIA Y TALLER
 elif opcion.startswith("9."):
     st.header("🚜 Control de Maquinaria, Motoguadañas y Herramientas")
-    st.text_area("Observaciones y Reportes del Taller (fallas de equipos, mantenimiento, etc.):", key="txt_taller")
-    if st.button("Guardar Novedad de Taller", key="btn_taller"):
+    st.text_area("Observaciones y Reportes del Taller (fallas de equipos, mantenimiento, etc.):")
+    if st.button("Guardar Novedad de Taller"):
         st.success("Novedad registrada.")
 
 # 10. CONFIGURACIÓN DE FINCA
 elif opcion.startswith("10."):
-    st.header("⚙️ Configuración General de FINCAMAR")
-    st.text_input("Nombre del Predio / Finca:", value="FINCAMAR", key="cfg_nom")
-    st.text_input("Ubicación Principal:", value="Río La Patera", key="cfg_ubi")
-    st.text_input("Responsable Operativo:", value="Control de Campo", key="cfg_resp")
-    if st.button("Guardar Cambios", key="btn_cfg_save"):
+    st.header("⚙️ Configuración General de CACAOMAR")
+    st.text_input("Nombre del Predio / Finca:", value="CACAOMAR")
+    st.text_input("Ubicación Principal:", value="Río La Patera")
+    st.text_input("Responsable Operativo:", value="Control de Campo")
+    if st.button("Guardar Cambios"):
         st.success("Configuración actualizada.")
