@@ -338,7 +338,7 @@ elif opcion.startswith("7."):
     </style>
 </head>
 <body>
-    <div class="title">REPORTE DIARIO DE AVANCE Y COSECHA - FINCAMAR</div>
+    <div class="title">REPORTE DIARIO DE AVANCE Y COSECHA - CACAOMAR</div>
     <div class="subtitle">Fecha: {rep['fecha']} | Área Total: 39.00 ha | Personal Total: {len(rep['personal'])} Personas</div>
 
     <div class="cards">
