@@ -6,10 +6,10 @@ from PIL import Image, ImageDraw
 import os
 import random
 
-# Configuración de página
+# Configuración de la aplicación
 st.set_page_config(page_title="CACAOMAR v10.0", page_icon="🌾", layout="wide")
 
-# --- BASE DE DATOS Y ESTADOS EN SESSION_STATE ---
+# --- BASE DE DATOS Y ESTADOS DE SESIÓN ---
 if 'personal' not in st.session_state:
     st.session_state.personal = [
         {"nombre": "Guadalupe Guerrero", "cargo": "Cosechador"},
@@ -36,7 +36,7 @@ if 'historial_reportes' not in st.session_state:
 if 'reporte_actual' not in st.session_state:
     st.session_state.reporte_actual = None
 
-# Coordenadas exactas para marcar los lotes sobre mapa_finca.jpg
+# Coordenadas ajustadas sobre la imagen real (mapa_finca.jpg)
 COORDENADAS_LOTES = {
     "EUROPEA": (120, 30, 470, 160),
     "CARRETERO": (10, 175, 180, 370),
@@ -60,12 +60,12 @@ COORDENADAS_LOTES = {
 def generar_color():
     return (random.randint(50, 220), random.randint(50, 220), random.randint(50, 220), 110)
 
-# --- LÓGICA DE PROCESAMIENTO INTELIGENTE DEL TEXTO ---
+# --- PROCESAMIENTO AUTOMÁTICO INTELIGENTE ---
 def procesar_texto_inteligente(texto):
     fecha_m = re.search(r'(\d{2}[\-\/]\d{2}[\-\/]\d{4})', texto)
     fecha = fecha_m.group(1) if fecha_m else datetime.today().strftime('%d-%m-%Y')
 
-    # Lectura de Cosecha (Mañana / Tarde)
+    # Suma de Cosecha (Mañana / Tarde)
     sm = int(re.search(r'(\d+)\s*sacos?\s*(?:en la|de la)?\s*mañana', texto, re.I).group(1)) if re.search(r'(\d+)\s*sacos?\s*(?:en la|de la)?\s*mañana', texto, re.I) else 0
     
     match_tarde = re.search(r'(\d+)\s*sacos?\s*con\s*([\d\.,]+)\s*libras', texto, re.I)
@@ -80,35 +80,37 @@ def procesar_texto_inteligente(texto):
     lbs_finales = round(total_lbs_raw % 100, 2)
     total_sacos = sm + st_s + sacos_extra
 
-    # Detección de Actividades y Lotes (Creación automática si no existen)
+    # Auto-detección y auto-creación de Actividades y Lotes
     actividades = []
-    if "EUROPEA" in texto.upper() or "CARRETERO" in texto.upper() or "LAS TECAS" in texto.upper() or "COSECHA" in texto.upper():
-        lotes_cosecha = ["EUROPEA", "CARRETERO", "LA PATERA", "LAS TECAS", "EL CORAL", "MANDARINA"]
-        for l in lotes_cosecha:
-            if l in texto.upper():
-                actividades.append({"actividad": "COSECHA", "lote": l})
+    lotes_posibles = list(COORDENADAS_LOTES.keys())
     
-    if "CUBO" in texto.upper() or "CORTE DE MONTE" in texto.upper():
-        actividades.append({"actividad": "CORTE DE MONTE", "lote": "CUBO"})
+    for lote in lotes_posibles:
+        if lote in texto.upper():
+            act_nombre = "COSECHA"
+            if "CORTE DE MONTE" in texto.upper() and lote == "CUBO":
+                act_nombre = "CORTE DE MONTE"
+            
+            if act_nombre not in st.session_state.catalogo_actividades:
+                st.session_state.catalogo_actividades[act_nombre] = generar_color()
+                
+            actividades.append({"actividad": act_nombre, "lote": lote})
 
-    # Detección de Personal Nuevo (Auto-Registro)
+    # Auto-detección y auto-creación de Personal
     nombres_existentes = [p["nombre"].lower() for p in st.session_state.personal]
     personal_dia = []
 
     patron_personas = r'[•\-]\s*([A-Za-zÁéíóúÁÉÍÓÚñÑ\s]+)'
     posibles_nombres = re.findall(patron_personas, texto)
-
-    nombres_descartar = ["cosecha", "corte de monte", "mañana", "tarde", "desvenador", "pesado y llenado de sacos", "progreso total", "total cosechado"]
+    palabras_filtro = ["cosecha", "corte de monte", "mañana", "tarde", "desvenador", "pesado y llenado de sacos", "progreso total", "total cosechado"]
 
     for n in posibles_nombres:
         nombre_clean = n.strip()
-        if nombre_clean.lower() not in nombres_descartar and len(nombre_clean) > 3:
+        if nombre_clean.lower() not in palabras_filtro and len(nombre_clean) > 3:
             personal_dia.append({"nombre": nombre_clean, "asistencia": "Presente"})
             if nombre_clean.lower() not in nombres_existentes:
                 st.session_state.personal.append({"nombre": nombre_clean, "cargo": "General"})
                 nombres_existentes.append(nombre_clean.lower())
 
-    # Retorno estructurado
     return {
         "fecha": fecha,
         "total_sacos": total_sacos,
@@ -118,7 +120,7 @@ def procesar_texto_inteligente(texto):
         "texto_raw": texto
     }
 
-# --- GENERADOR DEL MAPA OPERACIONAL ---
+# --- GENERADOR DEL MAPA SOBRE MAPA_FINCA.JPG ---
 def generar_mapa_coloreado(actividades):
     ruta_mapa = "mapa_finca.jpg"
     if os.path.exists(ruta_mapa):
@@ -142,7 +144,7 @@ def generar_mapa_coloreado(actividades):
 
 
 # ==========================================
-# 📌 MENÚ PRINCIPAL LATERAL (SIDEBAR ORIGINAL)
+# 📌 MENÚ PRINCIPAL LATERAL EXACTO (10 PUNTOS)
 # ==========================================
 st.sidebar.title("📌 Menú Principal CACAOMAR")
 opcion = st.sidebar.radio(
@@ -156,7 +158,8 @@ opcion = st.sidebar.radio(
         "6. 🗺️ Mapa de Avance por Lote",
         "7. 📄 Exportar Reporte Diario PDF",
         "8. 📄 Exportar Nómina PDF",
-        "9. 🚜 Control de Maquinaria y Taller"
+        "9. 🚜 Control de Maquinaria y Taller",
+        "10. ⚙️ Configuración de Finca"
     ]
 )
 
@@ -164,7 +167,8 @@ opcion = st.sidebar.radio(
 # OPCIÓN 1: REGISTRAR REPORTE DIARIO
 # ------------------------------------------
 if opcion.startswith("1."):
-    st.title("CACAOMAR (v10.0)")
+    # Título estilizado para que (v10.0) se vea más pequeño
+    st.markdown("<h1>CACAOMAR <span style='font-size: 20px; color: #666;'>(v10.0)</span></h1>", unsafe_allow_html=True)
     st.caption("Control Operacional, Cosecha, Nómina y Mapeo de Cacao")
     st.subheader("⚡ Registrar Reporte Diario")
 
@@ -228,7 +232,7 @@ elif opcion.startswith("3."):
     st.dataframe(pd.DataFrame(list(st.session_state.catalogo_actividades.keys()), columns=["Tarea / Actividad"]), use_container_width=True)
 
 # ------------------------------------------
-# OPCIÓN 4 HASTA 9: MÓDULOS DEL SISTEMA
+# OPCIÓN 4 A 10: MÓDULOS RESTANTES
 # ------------------------------------------
 elif opcion.startswith("4."):
     st.title("📅 Asistencia y Nómina Semanal")
@@ -257,3 +261,7 @@ elif opcion.startswith("8."):
 elif opcion.startswith("9."):
     st.title("🚜 Control de Maquinaria y Taller")
     st.info("Módulo de control de insumos y maquinaria de la finca.")
+
+elif opcion.startswith("10."):
+    st.title("⚙️ Configuración de Finca")
+    st.info("Módulo para parámetros generales, hectáreas por lote y preferencias de CACAOMAR.")
