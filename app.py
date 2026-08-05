@@ -7,53 +7,45 @@ import os
 import io
 import base64
 import sqlite3
+import hashlib
 
 # ==========================================
-# 🌾 1. CONFIGURACIÓN DE PÁGINA Y BASE DE DATOS
+# 🌾 1. CONFIGURACIÓN Y BASE DE DATOS
 # ==========================================
-st.set_page_config(page_title="CACAOMAR v15.0", page_icon="🌾", layout="wide")
+st.set_page_config(page_title="CACAOMAR v15.0 - Motor Dinámico", page_icon="🌾", layout="wide")
 
 DB_NAME = "cacaomar.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    # Tabla de Personal
     c.execute('''CREATE TABLE IF NOT EXISTS personal (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nombre TEXT UNIQUE,
                     cargo TEXT,
                     tarifa_diaria REAL DEFAULT 0.0
                 )''')
-    # Tabla de Reportes Diarios
     c.execute('''CREATE TABLE IF NOT EXISTS reportes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     fecha TEXT,
                     actividad_principal TEXT,
-                    sacos_manana INTEGER,
-                    sacos_tarde INTEGER,
-                    lbs_tarde REAL,
-                    total_sacos INTEGER,
-                    total_lbs REAL,
+                    sacos_total INTEGER,
+                    lbs_total REAL,
+                    tanques INTEGER,
+                    pomas INTEGER,
                     ha_trabajadas REAL,
                     personal_json TEXT,
                     actividades_json TEXT,
+                    observaciones TEXT,
                     texto_raw TEXT
                 )''')
     
-    # Cargar personal inicial si está vacía
     c.execute("SELECT COUNT(*) FROM personal")
     if c.fetchone()[0] == 0:
         personal_inicial = [
-            ("Guadalupe Guerrero", "Cosechador", 15.0),
             ("Jackson Andrade", "Multifunción", 15.0),
             ("Reynaldo Andrade", "Multifunción", 15.0),
-            ("Jessica Quiroz", "Cosechador", 15.0),
-            ("Belen Pozo", "Cosechador", 15.0),
-            ("Kerly Andrade", "Cosechador", 15.0),
-            ("Alan Pozo", "Cosechador", 15.0),
-            ("Monica", "Desvenador", 15.0),
-            ("David Pacheco", "Pesado y Llenado", 15.0),
+            ("David Pacheco", "Aplicador / Campo", 15.0),
             ("Jacqueline Quiroz", "Aplicador / Fumigación", 15.0)
         ]
         c.executemany("INSERT INTO personal (nombre, cargo, tarifa_diaria) VALUES (?, ?, ?)", personal_inicial)
@@ -64,17 +56,40 @@ def init_db():
 init_db()
 
 # ==========================================
-# 🎨 2. CONFIGURACIÓN DE CATÁLOGOS Y MAPA
+# 🎨 2. GENERADOR AUTÓNOMO DE COLORES (HASH)
 # ==========================================
-if 'catalogo_actividades' not in st.session_state:
-    st.session_state.catalogo_actividades = {
-        "COSECHA": (46, 204, 113, 120),           # Verde #2ecc71
-        "CORTE DE MONTE": (230, 126, 34, 120),    # Naranja #e67e22
-        "TUMBADA DE MONILLA": (241, 196, 15, 120),# Amarillo #f1c40f
-        "DESVENADO": (155, 89, 182, 120),        # Morado #9b59b6
-        "FUMIGACION": (52, 152, 219, 120)         # Azul #3498db
+def obtener_color_actividad(nombre_actividad):
+    """
+    Genera un color RGB único y consistente a partir del texto de la actividad.
+    Permite que Cualquier Actividad Nueva reciba su propio color automáticamente.
+    """
+    act_clean = nombre_actividad.strip().upper()
+    
+    # Colores preferenciales para labores comunes
+    colores_fijos = {
+        "COSECHA": (39, 174, 96, 150),              # Verde
+        "FUMIGACION DE MONTE": (52, 152, 219, 150),  # Azul
+        "CORTE DE MONTE": (230, 126, 34, 150)       # Naranja
     }
+    if act_clean in colores_fijos:
+        return colores_fijos[act_clean]
+    
+    # Para cualquier OTRA actividad nueva, genera un color único determinista
+    hash_val = int(hashlib.md5(act_clean.encode('utf-8')).hexdigest(), 16)
+    r = (hash_val & 0xFF0000) >> 16
+    g = (hash_val & 0x00FF00) >> 8
+    b = (hash_val & 0x0000FF)
+    
+    # Ajuste de contraste para evitar colores oscuros/invisibles
+    r = int((r + 100) / 2)
+    g = int((g + 100) / 2)
+    b = int((b + 100) / 2)
+    
+    return (r, g, b, 150)
 
+# ==========================================
+# 🗺️ 3. COORDENADAS Y ALIAS DE LOTES
+# ==========================================
 COORDENADAS_LOTES = {
     "EUROPEA": (120, 30, 470, 160),
     "CARRETERO": (10, 175, 180, 370),
@@ -98,10 +113,10 @@ COORDENADAS_LOTES = {
 ALIASES_LOTES = {
     "MANDARINA": ["MANDARINA", "LA MANDARINA"],
     "LA PATERA": ["LA PATERA", "PATERA"],
-    "CUBO": ["CUBO", "LAS CUBO", "EL CUBO", "LOS CUBOS"],
+    "CUBO": ["CUBO", "LAS CUBO", "EL CUBO"],
     "EUROPEA": ["EUROPEA", "LA EUROPEA"],
     "CARRETERO": ["CARRETERO", "EL CARRETERO"],
-    "LAS TECAS": ["LAS TECAS", "TECAS", "LA TECA"],
+    "LAS TECAS": ["LAS TECAS", "TECAS"],
     "ARAZA": ["ARAZA", "EL ARAZA"],
     "EL CORAL": ["EL CORAL", "CORAL"],
     "PALACIO CHICO": ["PALACIO CHICO"],
@@ -116,40 +131,46 @@ ALIASES_LOTES = {
 }
 
 # ==========================================
-# 🧠 3. PARSER INTELIGENTE ADAPTATIVO
+# 🧠 4. PARSER INTELIGENTE Y AUTÓNOMO
 # ==========================================
 def procesar_texto_inteligente(texto):
     try:
-        # 1. Fecha
+        # 1. Extraer Fecha
         fecha_m = re.search(r'(\d{2}[\-\/]\d{2}[\-\/]\d{4})', texto)
         fecha = fecha_m.group(1) if fecha_m else datetime.today().strftime('%d-%m-%Y')
 
-        # 2. Cosecha
-        sacos_manana, sacos_tarde, lbs_tarde = 0, 0, 0.0
-        match_m = re.search(r'Rendimiento\s*Ma[ñn]ana\s*:\s*(\d+)\s*sacos', texto, re.I)
-        if match_m: sacos_manana = int(match_m.group(1))
+        # 2. Extraer Actividad Principal Dinámicamente (Sin listas fijas)
+        act_nombre = "MANTENIMIENTO GENERAL"
+        match_act = re.search(r'(?:actividades de:|actividad:)\s*([^\n\•\*\.]+)', texto, re.I)
+        if match_act:
+            act_nombre = match_act.group(1).strip().upper()
+            act_nombre = re.sub(r'^[🌿🌿🌾🍂🍇🧹✂️\s]+', '', act_nombre) # Limpiar emojis
+        else:
+            # Detección por línea si no hay prefijo
+            for line in texto.split('\n'):
+                if any(k in line.lower() for k in ["fumigacion", "fumigación", "cosecha", "corte", "poda", "desvenado", "resiembra"]):
+                    act_nombre = line.replace('•', '').replace('🌿', '').strip().upper()
+                    break
 
-        match_t = re.search(r'Rendimiento\s*Tarde\s*:\s*(\d+)\s*sacos\s*con\s*([\d\.,]+)\s*lbs', texto, re.I)
-        if match_t:
-            sacos_tarde = int(match_t.group(1))
-            lbs_tarde = float(match_t.group(2).replace(',', '.'))
+        # 3. Datos Cuantitativos
+        sacos_m = re.search(r'(\d+)\s*sacos', texto, re.I)
+        sacos_total = int(sacos_m.group(1)) if sacos_m else 0
+        
+        lbs_m = re.search(r'([\d\.,]+)\s*lbs', texto, re.I)
+        lbs_total = float(lbs_m.group(1).replace(',', '.')) if lbs_m else 0.0
 
-        # 3. Hectáreas
+        tanques_m = re.search(r'(\d+)\s*tanques', texto, re.I)
+        tanques = int(tanques_m.group(1)) if tanques_m else 0
+        
+        pomas_m = re.search(r'(\d+)\s*pomas', texto, re.I)
+        pomas = int(pomas_m.group(1)) if pomas_m else (tanques * 10 if tanques > 0 else 0)
+
         ha_m = re.search(r'(\d+)\s*Hectarias?\s*(y\s*½|1\/2)?', texto, re.I)
         ha_trabajadas = float(ha_m.group(1)) if ha_m else 0.0
         if ha_m and ha_m.group(2): ha_trabajadas += 0.5
 
-        # 4. Actividad Principal
+        # 4. Lotes Intervenidos
         texto_upper = texto.upper()
-        act_nombre = "COSECHA"
-        if "FUMIGACION" in texto_upper or "FUMIGACIÓN" in texto_upper:
-            act_nombre = "FUMIGACION"
-        elif "CORTE DE MONTE" in texto_upper or "DESBROCE" in texto_upper:
-            act_nombre = "CORTE DE MONTE"
-        elif "DESVENADO" in texto_upper:
-            act_nombre = "DESVENADO"
-
-        # 5. Mapear Lotes Mencionados
         actividades = []
         for lote_real, aliases in ALIASES_LOTES.items():
             for alias in aliases:
@@ -158,54 +179,42 @@ def procesar_texto_inteligente(texto):
                         actividades.append({"actividad": act_nombre, "lote": lote_real})
                     break
 
-        # 6. Parser de Personal
+        # 5. Personal Activo
         personal_dia = []
-        lineas = texto.split('\n')
-        palabras_ignorar = [
-            "cosecha", "corte", "monte", "fumigacion", "fumigación", "rendimiento", 
-            "mañana", "tarde", "lote", "lotes", "sacos", "lbs", "libras", "progreso", 
-            "total", "realizado", "pendiente", "hectarias", "hectáreas", "actividades", 
-            "reporte", "finca", "cacaomar", "efectuadas", "trabajó", "personas"
-        ]
-
-        for line in lineas:
+        palabras_ignorar = ["cosecha", "fumigacion", "fumigación", "monte", "rendimiento", "sacos", "pomas", "tanques", "hectarias", "realizado", "pendiente"]
+        for line in texto.split('\n'):
             line_clean = line.strip()
             if line_clean.startswith(('•', '-', '*', '.')):
                 cand = re.sub(r'^[•\-\*\.]\s*', '', line_clean).strip()
                 cand = re.sub(r'\(.*?\)', '', cand).strip()
-                
                 if len(cand) > 3 and not any(p in cand.lower() for p in palabras_ignorar):
-                    jornada = "Día Completo"
-                    if "tarde" in line.lower(): jornada = "Tarde (a partir de 1:00 PM)"
-                    elif "3:00" in line.lower(): jornada = "Hasta 3:00 PM"
+                    personal_dia.append({"nombre": cand, "asistencia": "Presente", "jornada": "Día Completo"})
 
-                    if {"nombre": cand, "asistencia": "Presente", "jornada": jornada} not in personal_dia:
-                        personal_dia.append({"nombre": cand, "asistencia": "Presente", "jornada": jornada})
+        # 6. Observaciones de Campo
+        obs = ""
+        if "Cabe destacar" in texto:
+            obs = "Cabe destacar " + texto.split("Cabe destacar")[-1].strip()
+        elif "Observación" in texto or "Observacion" in texto:
+            obs = texto.split("Observación")[-1].strip()
 
         return {
             "fecha": fecha,
             "actividad_principal": act_nombre,
-            "sacos_manana": sacos_manana,
-            "sacos_tarde": sacos_tarde,
-            "lbs_tarde": lbs_tarde,
-            "total_sacos": sacos_manana + sacos_tarde,
-            "total_lbs": lbs_tarde,
-            "ha_trabajadas": ha_trabajadas if ha_trabajadas > 0 else (11.5 if act_nombre == "COSECHA" else 0.0),
+            "sacos_total": sacos_total,
+            "lbs_total": lbs_total,
+            "tanques": tanques,
+            "pomas": pomas,
+            "ha_trabajadas": ha_trabajadas,
             "actividades": actividades,
             "personal": personal_dia,
+            "observaciones": obs,
             "texto_raw": texto
         }
-    except Exception:
-        return {
-            "fecha": datetime.today().strftime('%d-%m-%Y'),
-            "actividad_principal": "COSECHA",
-            "sacos_manana": 0, "sacos_tarde": 0, "lbs_tarde": 0.0,
-            "total_sacos": 0, "total_lbs": 0.0, "ha_trabajadas": 0.0,
-            "actividades": [], "personal": [], "texto_raw": texto
-        }
+    except Exception as e:
+        return {"fecha": datetime.today().strftime('%d-%m-%Y'), "actividad_principal": "MANTENIMIENTO", "personal": [], "actividades": [], "texto_raw": texto}
 
 # ==========================================
-# 🗺️ 4. GENERADOR DEL MAPA INTERACTIVO
+# 🗺️ 5. MOTOR DE MAPA AUTÓNOMO
 # ==========================================
 def generar_mapa_coloreado(actividades):
     ruta_mapa = "mapa_finca.jpg"
@@ -222,159 +231,110 @@ def generar_mapa_coloreado(actividades):
         act_nombre = act["actividad"]
         if lote in COORDENADAS_LOTES:
             box = COORDENADAS_LOTES[lote]
-            color = st.session_state.catalogo_actividades.get(act_nombre, (128, 128, 128, 120))
-            draw.rectangle(box, fill=color, outline=(0, 100, 0, 255), width=3)
+            color = obtener_color_actividad(act_nombre)
+            draw.rectangle(box, fill=color, outline=(20, 80, 150, 255), width=3)
 
     resultado = Image.alpha_composite(base_img, overlay)
     return resultado.convert("RGB")
 
 # ==========================================
-# 📌 5. NAVEGACIÓN Y MENÚ LATERAL
+# 📌 6. INTERFAZ Y NAVEGACIÓN
 # ==========================================
-st.sidebar.title("📌 Menú CACAOMAR v15.0")
+st.sidebar.title("📌 CACAOMAR v15.0")
 opcion = st.sidebar.radio(
     "Seleccione Módulo:",
     [
         "1. ⚡ Registrar Reporte Diario",
-        "2. 👥 Gestionar Personal & Nómina",
-        "3. 📋 Catálogo de Actividades",
-        "4. 📅 Control de Asistencia",
-        "5. 📊 Historial y Exportar Excel",
-        "6. 🗺️ Mapa Operacional de Finca",
-        "7. 📄 Exportar Reporte Diario PDF",
-        "8. 🚜 Maquinaria y Taller",
-        "9. 📦 Inventario de Insumos",
-        "10. ⚙️ Configuración & Base de Datos"
+        "2. 👥 Gestionar Personal",
+        "3. 📊 Historial de Registros",
+        "4. 🗺️ Mapa Operacional",
+        "5. 📄 Exportar PDF Dinámico"
     ]
 )
 
 # ------------------------------------------
-# OPCIÓN 1: REGISTRAR REPORTE DIARIO
+# OPCIÓN 1: REGISTRAR REPORTE
 # ------------------------------------------
 if opcion.startswith("1."):
-    st.markdown("<h1>CACAOMAR <span style='font-size: 18px; color: #2e7d32;'>(v15.0 - Sistema Integral)</span></h1>", unsafe_allow_html=True)
-    st.caption("Gestión Agrícola, Procesamiento con IA Local y SQLite")
-    st.subheader("⚡ Registrar Reporte Diario de Operaciones")
-
-    texto_ingresado = st.text_area("📋 Pega el reporte en texto aquí:", height=220)
+    st.markdown("<h1>CACAOMAR <span style='font-size: 18px; color: #2e7d32;'>(Sistema Autónomo)</span></h1>", unsafe_allow_html=True)
+    st.caption("Ingresa cualquier reporte. El sistema detecta labores, insumos y asigna colores de forma automática.")
+    
+    texto_ingresado = st.text_area("📋 Pega la información del día aquí:", height=220)
     
     if st.button("🔄 Procesar y Guardar Reporte"):
         if texto_ingresado.strip():
             rep = procesar_texto_inteligente(texto_ingresado)
             
-            # Guardar en SQLite
             conn = sqlite3.connect(DB_NAME)
             c = conn.cursor()
             c.execute('''INSERT INTO reportes 
-                        (fecha, actividad_principal, sacos_manana, sacos_tarde, lbs_tarde, total_sacos, total_lbs, ha_trabajadas, personal_json, actividades_json, texto_raw)
+                        (fecha, actividad_principal, sacos_total, lbs_total, tanques, pomas, ha_trabajadas, personal_json, actividades_json, observaciones, texto_raw)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                     (rep['fecha'], rep['actividad_principal'], rep['sacos_manana'], rep['sacos_tarde'], 
-                      rep['lbs_tarde'], rep['total_sacos'], rep['total_lbs'], rep['ha_trabajadas'],
-                      str(rep['personal']), str(rep['actividades']), rep['texto_raw']))
+                     (rep['fecha'], rep['actividad_principal'], rep['sacos_total'], rep['lbs_total'], 
+                      rep['tanques'], rep['pomas'], rep['ha_trabajadas'],
+                      str(rep['personal']), str(rep['actividades']), rep['observaciones'], rep['texto_raw']))
             conn.commit()
             conn.close()
 
             st.session_state.reporte_actual = rep
-            st.success("✅ ¡Reporte procesado y almacenado permanentemente en la base de datos!")
+            st.success(f"✅ ¡Reporte procesado! Actividad detectada: **{rep['actividad_principal']}**")
         else:
-            st.warning("Por favor ingresa el texto del reporte.")
+            st.warning("Ingresa un texto para procesar.")
 
     if 'reporte_actual' in st.session_state and st.session_state.reporte_actual:
         rep = st.session_state.reporte_actual
         st.markdown("---")
-        st.markdown(f"### 📊 Resumen Procesado - {rep['fecha']}")
+        st.markdown(f"### 📊 Resumen Procesado Automaticamente - {rep['fecha']}")
         
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Labor Principal", rep['actividad_principal'])
-        c2.metric("Área Avance", f"{rep['ha_trabajadas']} ha")
-        c3.metric("Personal Activo", f"{len(rep['personal'])} Personas")
-        c4.metric("Lotes Intervenidos", f"{len(rep['actividades'])} Lotes")
-
-        # Verificación de Trabajadores Nuevos
-        conn = sqlite3.connect(DB_NAME)
-        df_p = pd.read_sql_query("SELECT nombre FROM personal", conn)
-        conn.close()
+        c1.metric("Actividad Detectada", rep['actividad_principal'])
+        c2.metric("Superficie", f"{rep['ha_trabajadas']} ha")
         
-        nombres_registrados = df_p['nombre'].tolist() if not df_p.empty else []
-        nuevos_det = [p['nombre'] for p in rep['personal'] if p['nombre'] not in nombres_registrados]
+        if rep['sacos_total'] > 0:
+            c3.metric("Cosecha", f"{rep['sacos_total']} Sacos / {rep['lbs_total']} lbs")
+        elif rep['pomas'] > 0 or rep['tanques'] > 0:
+            c3.metric("Insumos", f"{rep['pomas']} Pomas ({rep['tanques']} Tanques)")
+        else:
+            c3.metric("Avance", "Jornada Completa")
+            
+        c4.metric("Personal", f"{len(rep['personal'])} Personas")
 
-        if nuevos_det:
-            st.warning(f"💡 **Detección Automática:** Se encontraron {len(nuevos_det)} personas nuevas no registradas: {', '.join(nuevos_det)}")
-            if st.button("➕ Registrar personas nuevas en Base de Datos"):
-                conn = sqlite3.connect(DB_NAME)
-                c = conn.cursor()
-                for nom in nuevos_det:
-                    c.execute("INSERT OR IGNORE INTO personal (nombre, cargo, tarifa_diaria) VALUES (?, ?, ?)", (nom, "Cosechador/Campo", 15.0))
-                conn.commit()
-                conn.close()
-                st.success("¡Personal registrado en la base de datos exitosamente!")
-
-        st.subheader("🗺️ Mapa Operacional de Avance")
-        mapa = generar_mapa_coloreado(rep['actividades'])
-        st.image(mapa, caption="Vista general de la finca", use_column_width=True)
+        st.subheader("🗺️ Capa Visual Generada Auto-Adaptativamente")
+        st.image(generar_mapa_coloreado(rep['actividades']), use_column_width=True)
 
 # ------------------------------------------
-# OPCIÓN 2: GESTIONAR PERSONAL & NÓMINA
+# OPCIÓN 2: PERSONAL
 # ------------------------------------------
 elif opcion.startswith("2."):
-    st.title("👥 Personal y Estructura de Nómina")
+    st.title("👥 Personal Registrado")
     conn = sqlite3.connect(DB_NAME)
     df_p = pd.read_sql_query("SELECT * FROM personal", conn)
     conn.close()
-
     st.dataframe(df_p, use_container_width=True)
 
-    with st.expander("➕ Agregar Nuevo Trabajador Manualmente"):
-        with st.form("form_nuevo_p"):
-            nom = st.text_input("Nombre Completo:")
-            cargo = st.text_input("Cargo / Labor Principal:", "Cosechador")
-            tarifa = st.number_input("Tarifa Diaria ($):", value=15.0)
-            if st.form_submit_button("Guardar Trabajador"):
-                conn = sqlite3.connect(DB_NAME)
-                c = conn.cursor()
-                c.execute("INSERT INTO personal (nombre, cargo, tarifa_diaria) VALUES (?, ?, ?)", (nom, cargo, tarifa))
-                conn.commit()
-                conn.close()
-                st.success("Trabajador registrado.")
-                st.rerun()
-
 # ------------------------------------------
-# OPCIÓN 5: HISTORIAL Y EXPORTAR EXCEL
+# OPCIÓN 3: HISTORIAL
 # ------------------------------------------
-elif opcion.startswith("5."):
-    st.title("📊 Historial General y Exportación a Excel")
+elif opcion.startswith("3."):
+    st.title("📊 Historial de Reportes")
     conn = sqlite3.connect(DB_NAME)
-    df_rep = pd.read_sql_query("SELECT id, fecha, actividad_principal, total_sacos, total_lbs, ha_trabajadas FROM reportes ORDER BY id DESC", conn)
+    df_rep = pd.read_sql_query("SELECT id, fecha, actividad_principal, ha_trabajadas, pomas, sacos_total FROM reportes ORDER BY id DESC", conn)
     conn.close()
-
     st.dataframe(df_rep, use_container_width=True)
 
-    if not df_rep.empty:
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            df_rep.to_excel(writer, sheet_name='Reportes_Historicos', index=False)
-        
-        st.download_button(
-            label="📥 Descargar Historial Completo en Excel (.xlsx)",
-            data=buffer.getvalue(),
-            file_name=f"CACAOMAR_Historial_{datetime.today().strftime('%Y%m%d')}.xlsx",
-            mime="application/vnd.ms-excel"
-        )
-
 # ------------------------------------------
-# OPCIÓN 6: MAPA OPERACIONAL
+# OPCIÓN 4: MAPA
 # ------------------------------------------
-elif opcion.startswith("6."):
-    st.title("🗺️ Mapa Operacional por Lote")
+elif opcion.startswith("4."):
+    st.title("🗺️ Mapa Operacional de Finca")
     actividades_act = st.session_state.reporte_actual['actividades'] if 'reporte_actual' in st.session_state and st.session_state.reporte_actual else []
-    mapa_gen = generar_mapa_coloreado(actividades_act)
-    st.image(mapa_gen, caption="Estado de lotes en la finca", use_column_width=True)
+    st.image(generar_mapa_coloreado(actividades_act), use_column_width=True)
 
 # ------------------------------------------
-# OPCIÓN 7: EXPORTAR REPORTE PDF
+# OPCIÓN 5: PDF DINÁMICO AUTO-ADAPTATIVO
 # ------------------------------------------
-elif opcion.startswith("7."):
-    st.title("📄 Exportar Reporte Diario Oficial PDF")
+elif opcion.startswith("5."):
+    st.title("📄 Generación de Reporte PDF Dinámico")
     
     if 'reporte_actual' in st.session_state and st.session_state.reporte_actual:
         rep = st.session_state.reporte_actual
@@ -384,168 +344,119 @@ elif opcion.startswith("7."):
         mapa_img.save(buffered, format="JPEG")
         mapa_b64 = base64.b64encode(buffered.getvalue()).decode()
 
-        filas_personal = ""
-        for p in rep['personal']:
-            badge_class = "badge-green"
-            jornada_txt = p.get('jornada', 'Día Completo')
-            if "3:00" in jornada_txt: badge_class = "badge-blue"
-            elif "Tarde" in jornada_txt: badge_class = "badge-orange"
+        filas_p = "".join([f"<tr><td><b>{p['nombre']}</b></td><td>{rep['actividad_principal']}</td><td><span class='badge badge-green'>Día Completo</span></td></tr>" for p in rep['personal']])
+        lotes_str = ", ".join([a['lote'].title() for a in rep['actividades']]) if rep['actividades'] else "Ninguno"
 
-            filas_personal += f"""
-            <tr>
-                <td><b>{p['nombre']}</b></td>
-                <td>{rep['actividad_principal']} / Campo</td>
-                <td><span class="badge {badge_class}">{jornada_txt}</span></td>
-            </tr>
+        # TABLA DINÁMICA SEGÚN LO QUE EL PARSER DETECTÓ
+        if rep['sacos_total'] > 0:
+            titulo_sec1 = "1. REGISTRO DE COSECHA Y PRODUCCIÓN"
+            tabla_sec1 = f"""
+            <table>
+                <tr><th>CONCEPTO</th><th>CANTIDAD</th><th>DETALLE</th></tr>
+                <tr><td>Sacos Cosechados</td><td><b>{rep['sacos_total']} Sacos</b></td><td>Jornada Completa</td></tr>
+                <tr><td>Libras Adicionales</td><td><b>{rep['lbs_total']} lbs</b></td><td>Sueltas</td></tr>
+            </table>
+            """
+        elif rep['pomas'] > 0 or rep['tanques'] > 0:
+            titulo_sec1 = f"1. CONTROL DE APLICACIÓN E INSUMOS ({rep['actividad_principal']})"
+            prom_ha = (rep['pomas']/rep['ha_trabajadas']) if rep['ha_trabajadas'] > 0 else 0
+            tabla_sec1 = f"""
+            <table>
+                <tr><th>CONCEPTO / INSUMO</th><th>CANTIDAD DETECTADA</th><th>PROMEDIO POR HECTÁREA</th></tr>
+                <tr><td>Tanques Preparados/Usados</td><td><b>{rep['tanques']} Tanques</b></td><td>Aplicación en Campo</td></tr>
+                <tr><td>Pomas Consumidas</td><td><b>{rep['pomas']} Pomas</b></td><td><b>{prom_ha:.1f} pomas/ha</b></td></tr>
+            </table>
+            """
+        else:
+            titulo_sec1 = f"1. RESUMEN DE AVANCE DE TRABAJO ({rep['actividad_principal']})"
+            tabla_sec1 = f"""
+            <table>
+                <tr><th>LABOR EJECUTADA</th><th>SUPERFICIE CUBIERTA</th><th>ESTADO</th></tr>
+                <tr><td><b>{rep['actividad_principal']}</b></td><td><b>{rep['ha_trabajadas']} ha</b></td><td>Completado en la jornada</td></tr>
+            </table>
             """
 
-        lotes_str = ", ".join([a['lote'].title() for a in rep['actividades']]) if rep['actividades'] else "Ninguno registrado"
+        obs_box = f"""
+        <div class="progress-box" style="margin-top:8px; background:#fffde7; border-color:#fff59d;">
+            <b>📌 Observaciones de Campo:</b><br>{rep['observaciones']}
+        </div>
+        """ if rep['observaciones'] else ""
 
         html_pdf = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <style>
-        body {{ font-family: 'Helvetica Neue', Arial, sans-serif; margin: 15px; color: #222; background: #fff; }}
-        .title {{ color: #1b5e20; font-size: 18px; font-weight: bold; border-bottom: 2px solid #1b5e20; padding-bottom: 4px; text-transform: uppercase; }}
+        body {{ font-family: Arial, sans-serif; margin: 15px; color: #222; background: #fff; }}
+        .title {{ color: #1b5e20; font-size: 18px; font-weight: bold; border-bottom: 2px solid #1b5e20; padding-bottom: 4px; }}
         .subtitle {{ font-size: 11px; color: #555; margin-bottom: 12px; margin-top: 4px; }}
         .cards {{ display: flex; justify-content: space-between; margin-bottom: 12px; }}
         .card {{ background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 4px; padding: 8px; width: 23%; text-align: center; }}
         .card-title {{ font-size: 9px; color: #666; font-weight: bold; text-transform: uppercase; }}
-        .card-val {{ font-size: 15px; font-weight: bold; color: #2e7d32; margin: 3px 0; }}
-        .card-sub {{ font-size: 9px; color: #777; }}
-        .sec-header {{ background: #2e7d32; color: white; font-weight: bold; padding: 5px 8px; font-size: 11px; margin-top: 12px; border-radius: 2px; }}
+        .card-val {{ font-size: 13px; font-weight: bold; color: #2e7d32; margin: 3px 0; }}
+        .sec-header {{ background: #2e7d32; color: white; font-weight: bold; padding: 5px 8px; font-size: 11px; margin-top: 12px; }}
         table {{ width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 10px; }}
-        th {{ background: #43a047; color: white; text-align: left; padding: 5px; font-size: 10px; }}
-        td {{ border-bottom: 1px solid #eee; padding: 5px; color: #333; }}
-        .badge {{ padding: 2px 6px; border-radius: 3px; font-size: 9px; font-weight: bold; display: inline-block; }}
+        th {{ background: #43a047; color: white; text-align: left; padding: 5px; }}
+        td {{ border-bottom: 1px solid #eee; padding: 5px; }}
+        .badge {{ padding: 2px 6px; border-radius: 3px; font-size: 9px; font-weight: bold; }}
         .badge-green {{ background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; }}
-        .badge-blue {{ background: #e3f2fd; color: #0d47a1; border: 1px solid #bbdefb; }}
-        .badge-orange {{ background: #fff3e0; color: #e65100; border: 1px solid #e65100; }}
-        .progress-box {{ background: #f9f9f9; border: 1px solid #e0e0e0; padding: 6px; margin-top: 4px; font-size: 9.5px; border-radius: 3px; }}
-        .map-container {{ text-align: center; margin-top: 10px; border: 1px solid #ddd; padding: 8px; border-radius: 4px; background: #fafafa; }}
-        .map-container img {{ width: 100%; max-width: 600px; border-radius: 3px; }}
-        .map-legend {{ display: flex; justify-content: center; gap: 15px; margin-top: 8px; padding-top: 6px; border-top: 1px solid #eee; font-size: 9.5px; }}
-        .legend-item {{ display: flex; align-items: center; gap: 5px; font-weight: 500; color: #444; }}
-        .dot {{ width: 10px; height: 10px; border-radius: 50%; display: inline-block; }}
-        .dot-green {{ background: #2ecc71; }}
-        .dot-orange {{ background: #e67e22; }}
-        .dot-yellow {{ background: #f1c40f; }}
-        .dot-purple {{ background: #9b59b6; }}
-        .dot-blue {{ background: #3498db; }}
+        .progress-box {{ background: #f9f9f9; border: 1px solid #e0e0e0; padding: 6px; font-size: 9.5px; border-radius: 3px; }}
+        .map-container {{ text-align: center; margin-top: 10px; border: 1px solid #ddd; padding: 8px; background: #fafafa; }}
+        .map-container img {{ width: 100%; max-width: 600px; }}
     </style>
 </head>
 <body>
-    <div class="title">REPORTE DIARIO DE AVANCE Y COSECHA - CACAOMAR</div>
-    <div class="subtitle">Fecha: {rep['fecha']} | Área Total: 39.00 ha | Personal Total: {len(rep['personal'])} Personas</div>
+    <div class="title">REPORTE DIARIO DE OPERACIONES - CACAOMAR</div>
+    <div class="subtitle">Fecha: {rep['fecha']} | Superficie Total: 39.00 ha | Personal: {len(rep['personal'])} Personas</div>
 
     <div class="cards">
         <div class="card">
-            <div class="card-title">Cosecha del Día</div>
-            <div class="card-val">{rep['total_sacos']} Sacos</div>
-            <div class="card-sub">+ {rep['total_lbs']} lbs</div>
-        </div>
-        <div class="card">
-            <div class="card-title">Área Trabajada Hoy</div>
-            <div class="card-val">{rep['ha_trabajadas']} ha</div>
-            <div class="card-sub">{len(rep['actividades'])} Lotes intervenidos</div>
-        </div>
-        <div class="card">
-            <div class="card-title">Labor Principal</div>
+            <div class="card-title">Actividad Principal</div>
             <div class="card-val">{rep['actividad_principal']}</div>
-            <div class="card-sub">Jornada de Campo</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Área Intervenida</div>
+            <div class="card-val">{rep['ha_trabajadas']} ha</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Insumos / Producción</div>
+            <div class="card-val">{'Cosecha: ' + str(rep['sacos_total']) + ' sacos' if rep['sacos_total']>0 else str(rep['pomas']) + ' Pomas'}</div>
         </div>
         <div class="card">
             <div class="card-title">Personal Activo</div>
             <div class="card-val">{len(rep['personal'])} Personas</div>
-            <div class="card-sub">Cuadrilla en Finca</div>
         </div>
     </div>
 
-    <div class="sec-header">1. CONTROL DE COSECHA Y RENDIMIENTO</div>
-    <table>
-        <tr>
-            <th>TURNO / DETALLE</th>
-            <th>SACOS COSECHADOS</th>
-            <th>LIBRAS ADICIONALES</th>
-            <th>TOTAL ACUMULADO</th>
-        </tr>
-        <tr>
-            <td>Turno Mañana</td>
-            <td>{rep['sacos_manana']} sacos</td>
-            <td>0.00 lbs</td>
-            <td>{rep['sacos_manana']} sacos</td>
-        </tr>
-        <tr>
-            <td>Turno Tarde</td>
-            <td>{rep['sacos_tarde']} sacos</td>
-            <td>{rep['lbs_tarde']} lbs</td>
-            <td>{rep['sacos_tarde']} sacos + {rep['lbs_tarde']} lbs</td>
-        </tr>
-        <tr style="font-weight: bold; background: #f5f5f5;">
-            <td>TOTAL DÍA</td>
-            <td>{rep['total_sacos']} sacos</td>
-            <td>{rep['total_lbs']} lbs</td>
-            <td>{rep['total_sacos']} sacos + {rep['total_lbs']} lbs</td>
-        </tr>
-    </table>
+    <div class="sec-header">{titulo_sec1}</div>
+    {tabla_sec1}
 
     <div class="progress-box">
-        <b>Lotes Intervenidos Hoy ({rep['ha_trabajadas']} ha):</b> {lotes_str}.<br>
-        <b>Labor Ejecutada:</b> {rep['actividad_principal']}.
+        <b>Lotes Intervenidos Hoy ({rep['ha_trabajadas']} ha):</b> {lotes_str}.
     </div>
 
-    <div class="sec-header">2. ASISTENCIA Y DISTRIBUCIÓN DE PERSONAL ({len(rep['personal'])} PERSONAS)</div>
+    {obs_box}
+
+    <div class="sec-header">2. ASISTENCIA DE PERSONAL ({len(rep['personal'])} PERSONAS)</div>
     <table>
-        <tr>
-            <th>TRABAJADOR</th>
-            <th>LABOR PRINCIPAL</th>
-            <th>JORNADA / HORARIO</th>
-        </tr>
-        {filas_personal}
+        <tr><th>TRABAJADOR</th><th>LABOR</th><th>JORNADA</th></tr>
+        {filas_p}
     </table>
 
-    <div class="sec-header">3. MAPA OPERACIONAL Y LEYENDA DE AVANCE DE FINCA</div>
+    <div class="sec-header">3. MAPA OPERACIONAL Y AVANCE GENERADO</div>
     <div class="map-container">
         <img src="data:image/jpeg;base64,{mapa_b64}" />
-        <div class="map-legend">
-            <div class="legend-item"><span class="dot dot-green"></span> Cosecha</div>
-            <div class="legend-item"><span class="dot dot-blue"></span> Fumigación</div>
-            <div class="legend-item"><span class="dot dot-orange"></span> Corte de Monte</div>
-            <div class="legend-item"><span class="dot dot-yellow"></span> Monilla</div>
-            <div class="legend-item"><span class="dot dot-purple"></span> Desvenado</div>
-        </div>
     </div>
 </body>
 </html>"""
 
-        st.components.v1.html(html_pdf, height=850, scrolling=True)
+        st.components.v1.html(html_pdf, height=800, scrolling=True)
 
         st.download_button(
-            label="📥 Descargar Reporte PDF Oficial Completo",
+            label="📥 Descargar Reporte PDF Oficial",
             data=html_pdf,
             file_name=f"Reporte_CACAOMAR_{rep['fecha']}.html",
             mime="text/html"
         )
     else:
-        st.warning("⚠️ Primero procesa un reporte en la Opción 1.")
-
-# ------------------------------------------
-# OPCIONES RESTANTES (MÓDULOS EN DESARROLLO)
-# ------------------------------------------
-elif opcion.startswith("3."):
-    st.title("📋 Catálogo de Actividades")
-    st.write(st.session_state.catalogo_actividades)
-
-elif opcion.startswith("4."):
-    st.title("📅 Control de Asistencia Semanal")
-
-elif opcion.startswith("8."):
-    st.title("🚜 Maquinaria y Taller")
-
-elif opcion.startswith("9."):
-    st.title("📦 Inventario de Insumos")
-
-elif opcion.startswith("10."):
-    st.title("⚙️ Configuración & Base de Datos")
-    st.success(f"Base de datos SQLite activa: `{DB_NAME}`")
+        st.warning("⚠️ Primero procesa un reporte en la Opci
