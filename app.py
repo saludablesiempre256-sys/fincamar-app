@@ -65,7 +65,6 @@ def obtener_color_actividad(nombre_actividad):
     """
     act_clean = nombre_actividad.strip().upper()
     
-    # Colores preferenciales para labores comunes
     colores_fijos = {
         "COSECHA": (39, 174, 96, 150),              # Verde
         "FUMIGACION DE MONTE": (52, 152, 219, 150),  # Azul
@@ -74,13 +73,11 @@ def obtener_color_actividad(nombre_actividad):
     if act_clean in colores_fijos:
         return colores_fijos[act_clean]
     
-    # Para cualquier OTRA actividad nueva, genera un color único determinista
     hash_val = int(hashlib.md5(act_clean.encode('utf-8')).hexdigest(), 16)
     r = (hash_val & 0xFF0000) >> 16
     g = (hash_val & 0x00FF00) >> 8
     b = (hash_val & 0x0000FF)
     
-    # Ajuste de contraste para evitar colores oscuros/invisibles
     r = int((r + 100) / 2)
     g = int((g + 100) / 2)
     b = int((b + 100) / 2)
@@ -139,14 +136,13 @@ def procesar_texto_inteligente(texto):
         fecha_m = re.search(r'(\d{2}[\-\/]\d{2}[\-\/]\d{4})', texto)
         fecha = fecha_m.group(1) if fecha_m else datetime.today().strftime('%d-%m-%Y')
 
-        # 2. Extraer Actividad Principal Dinámicamente (Sin listas fijas)
+        # 2. Extraer Actividad Principal Dinámicamente
         act_nombre = "MANTENIMIENTO GENERAL"
         match_act = re.search(r'(?:actividades de:|actividad:)\s*([^\n\•\*\.]+)', texto, re.I)
         if match_act:
             act_nombre = match_act.group(1).strip().upper()
-            act_nombre = re.sub(r'^[🌿🌿🌾🍂🍇🧹✂️\s]+', '', act_nombre) # Limpiar emojis
+            act_nombre = re.sub(r'^[🌿🌾🍂🍇🧹✂️\s]+', '', act_nombre)
         else:
-            # Detección por línea si no hay prefijo
             for line in texto.split('\n'):
                 if any(k in line.lower() for k in ["fumigacion", "fumigación", "cosecha", "corte", "poda", "desvenado", "resiembra"]):
                     act_nombre = line.replace('•', '').replace('🌿', '').strip().upper()
@@ -284,7 +280,7 @@ if opcion.startswith("1."):
     if 'reporte_actual' in st.session_state and st.session_state.reporte_actual:
         rep = st.session_state.reporte_actual
         st.markdown("---")
-        st.markdown(f"### 📊 Resumen Procesado Automaticamente - {rep['fecha']}")
+        st.markdown(f"### 📊 Resumen Procesado Automáticamente - {rep['fecha']}")
         
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Actividad Detectada", rep['actividad_principal'])
@@ -347,7 +343,6 @@ elif opcion.startswith("5."):
         filas_p = "".join([f"<tr><td><b>{p['nombre']}</b></td><td>{rep['actividad_principal']}</td><td><span class='badge badge-green'>Día Completo</span></td></tr>" for p in rep['personal']])
         lotes_str = ", ".join([a['lote'].title() for a in rep['actividades']]) if rep['actividades'] else "Ninguno"
 
-        # TABLA DINÁMICA SEGÚN LO QUE EL PARSER DETECTÓ
         if rep['sacos_total'] > 0:
             titulo_sec1 = "1. REGISTRO DE COSECHA Y PRODUCCIÓN"
             tabla_sec1 = f"""
@@ -459,4 +454,4 @@ elif opcion.startswith("5."):
             mime="text/html"
         )
     else:
-        st.warning("⚠️ Primero procesa un reporte en la Opci
+        st.warning("⚠️ Primero procesa un reporte en la Opción 1.")
